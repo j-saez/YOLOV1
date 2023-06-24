@@ -87,5 +87,4 @@ class YOLOV1Loss(nn.Module):
         prob_loss = self.mse(prob_predictions, prob_labels)
 
         loss = self.lambda_coord * box_loss + object_loss + self.lambda_noobj * noobject_loss + prob_loss
-        print(type(loss))
         return loss

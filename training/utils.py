@@ -1,20 +1,16 @@
+import os
+from PIL.Image import preinit
 import torch
-import torch.nn as nn
-from training.config import Hyperparams
-from yolov1.training.metrics import calculate_iou
+from training.metrics        import non_max_suppression
+from torch.utils.tensorboard import SummaryWriter
+from training                import YOLOV1Loss
 
-def test_model(model: nn.Module, hyperparams: Hyperparams, val_dataloader: torch.utils.data.DataLoader):
-    """
-    TODO
-    """
-    model.eval()
-    val_iou = torch.zeros(len(val_dataloader))
-    for batch_idx, (imgs, labels) in val_dataloader:
-
-    return val_iou.mean().item()
+PROB_IDX = 1
 
 def convert_cellboxes(predictions, S=7):
     """
+    TODO
+
     Converts bounding boxes output from Yolo with
     an image split size of S into entire image ratios
     rather than relative to cell ratios. Tried to do this
@@ -49,19 +45,19 @@ def convert_cellboxes(predictions, S=7):
 
     return converted_preds
 
-def get_bboxes(loader: torch.utils.data.DataLoader, model: torch.nn.Module, iou_threshold: float, threshold: float, pred_format: str="cells", box_format: str="midpoint", device: str="cuda"):
+def get_bboxes(loader: torch.utils.data.DataLoader, model: torch.nn.Module, iou_threshold: float, threshold: float, box_format: str="midpoint", device: str="cuda"):
     """
-    TODO
+    Gets all the prediction and label boxes for the data passed in the loader parameter RELATIVE to the IMAGE.
     Inputs: 
-        >> loader: (DataLoader)
-        >> model: (nn.Module)
-        >> iou_threshold: (float)
-        >> threshold: (float)
-        >> pred_format: (str)
-        >> box_format: (str)
-        >> device: (str)
+        >> loader: (DataLoader) Contains the images and labels.
+        >> model: (nn.Module) Object detector
+        >> iou_threshold: (float) Threshold where the predicted boxes are correct.
+        >> threshold: (float) Threshold to remove predicted bboxes (independent of IoU).
+        >> box_format: (str) "midpoint" [x,y,w,h] or "corners" [x1,y1,x2,y1].
+        >> device: (str) Device where the data and the model will run.
     Outputs:
-        TODO
+        >> all_pred_boxes: (list) Model predictions boxes. TODO: is it a list of lists?
+        >> all_true_boxes: (list) Label boxes.             TODO: is it a list of lists?
     """
     all_pred_boxes = []
     all_true_boxes = []
@@ -71,6 +67,7 @@ def get_bboxes(loader: torch.utils.data.DataLoader, model: torch.nn.Module, iou_
     train_idx = 0
 
     for batch_idx, (x, labels) in enumerate(loader):
+        print(f'Getting boxes for batch_idx {batch_idx}/{len(loader)}', end='\r')
         x = x.to(device)
         labels = labels.to(device)
 
@@ -86,20 +83,14 @@ def get_bboxes(loader: torch.utils.data.DataLoader, model: torch.nn.Module, iou_
                 bboxes[idx],
                 iou_threshold=iou_threshold,
                 threshold=threshold,
-                box_format=box_format,
-            )
-
-
-            #if batch_idx == 0 and idx == 0:
-            #    plot_image(x[idx].permute(1,2,0).to("cpu"), nms_boxes)
-            #    print(nms_boxes)
+                box_format=box_format,)
 
             for nms_box in nms_boxes:
                 all_pred_boxes.append([train_idx] + nms_box)
 
             for box in true_bboxes[idx]:
                 # many will get converted to 0 pred
-                if box[1] > threshold:
+                if box[PROB_IDX] > threshold:
                     all_true_boxes.append([train_idx] + box)
 
             train_idx += 1
@@ -108,7 +99,16 @@ def get_bboxes(loader: torch.utils.data.DataLoader, model: torch.nn.Module, iou_
     return all_pred_boxes, all_true_boxes
 
 
-def cellboxes_to_boxes(out, S=7):
+def cellboxes_to_boxes(out, S: int=7):
+    """
+    TODO
+    Convert boxes relatives to a cell to boxes relatives to the image.
+    Inputs:
+        >> out: ()
+        >> S: ()
+    Outputs:
+        >> all_bboxes: (list) Boxes relatives to the image.
+    """
     converted_pred = convert_cellboxes(out).reshape(out.shape[0], S * S, -1)
     converted_pred[..., 0] = converted_pred[..., 0].long()
     all_bboxes = []
@@ -122,12 +122,95 @@ def cellboxes_to_boxes(out, S=7):
 
     return all_bboxes
 
-def save_checkpoint(state, filename="my_checkpoint.pth.tar"):
+def save_checkpoint(state: dict, filename: str):
+    """
+    Saves the state of the model in the especified location.
+    Inputs:
+        state: (dict) Contains the state of the model in "state_dict" and the state of the optimizer in "optimizer".
+        filename: (str) String contining the path and name of the file where the state will be stored.
+    """
     print("=> Saving checkpoint")
     torch.save(state, filename)
+    print("\t => Saved.")
+    return
 
 
-def load_checkpoint(checkpoint, model, optimizer):
+def load_checkpoint(weight_filename, model, optimizer):
+    """
+    Loads the checkpoint from the especified file and assigns the state of the model and the optimizer back.
+    Inputs:
+        >> weight_filename: (str) String containing the name and the path to the state file.
+        >> model: (torch.nn.Module) Model for which the weights will be loaded and assigned back.
+        >> optimizer: (torch.nn.optim) Optimizer used for the training process.
+    """
     print("=> Loading checkpoint")
+    checkpoint = torch.load(weight_filename)
     model.load_state_dict(checkpoint["state_dict"])
     optimizer.load_state_dict(checkpoint["optimizer"])
+
+
+def load_tensorboard_writer(config):
+    """
+    Loads the tensorboard writer object.
+    Inputs:
+        >> config: configuration for the training (check <root repo>/training/config.py).
+    Outputs:
+        >> writer: tensorboard.SummaryWriter to save the training data.
+        >> model_checkpoints_dir: (str) containing the path where the weights of the models will be saved.
+    """
+    tensorboard_dir = os.getcwd()+'/runs/tensorboard/'
+    checkpoints_dir = os.getcwd()+'/runs/checkpoints/'
+    training_dir_name = f'YOLO_{config.dataparams.dataset_name}_bs{config.hyperparams.batch_size}_lr{config.hyperparams.lr}_e{config.hyperparams.epochs}'
+    model_logs_dir = os.getcwd() + '/runs/tensorboard/' + training_dir_name
+    model_checkpoints_dir = os.getcwd() + '/runs/checkpoints/' + training_dir_name
+
+    create_runs_dirs(tensorboard_dir, checkpoints_dir, model_checkpoints_dir, model_logs_dir)
+    writer = SummaryWriter(log_dir=model_logs_dir)
+    return writer, model_checkpoints_dir
+
+def create_runs_dirs(tensorboard_dir, weights_dir, model_weights_dir, model_logs_dir) -> None:
+    """
+    Creates the directories to save all the data in tensorboards and the models' weights.
+    Inputs:
+        >> tensorboard_dir
+        >> weights_dir
+        >> model_weights_dir
+        >> model_logs_dir
+    Outputs: None
+    """
+    if not os.path.isdir(os.getcwd()+'/runs'):
+        os.mkdir(os.getcwd()+'/runs')
+    if not os.path.isdir(tensorboard_dir):
+        os.mkdir(tensorboard_dir)
+    if not os.path.isdir(weights_dir):
+        os.mkdir(weights_dir)
+    if not os.path.isdir(model_logs_dir):
+        os.mkdir(model_logs_dir)
+    if not os.path.isdir(model_weights_dir):
+        os.mkdir(model_weights_dir)
+    return
+
+def test_model(model: torch.nn.Module, dataloader: torch.utils.data.DataLoader, criterion: YOLOV1Loss):
+    """
+    Tests the model and returns the average loss over the test data.
+    Inputs:
+        >> model: (torch.nn.Module) Model to be tested.
+        >> dataloader: (torch.utils.data.DataLoader) DataLoader containing the test data.
+        >> criterion: (torch.nn.Module) Criterion for calculating the test loss.
+    Outputs:
+        >> test_avg_loss: (float) Average test loss.
+    """
+    loss_list = []
+    device = model.device_param.device
+    with torch.no_grad():
+        model.eval()
+        for imgs, labels in dataloader: 
+            imgs = imgs.to(device)
+            labels = labels.to(device)
+
+            predictions = model(imgs)
+            loss = criterion(predictions, labels)
+            loss_list.append(loss)
+
+    test_avg_loss = sum(loss_list) / len(loss_list)
+    return test_avg_loss

@@ -36,6 +36,8 @@ The target shape for one image is: (S,S,25), where 20 are for the class predicti
 The predictions shape for one image is: (S,S,30), where 20 are for the class predictions (if having 20 classes), 21 will be for the prob and the 4 remaining are for the bbox. 25 will be for prob2 and the other four are for the second bbox.
 """
 
+DATA_PER_BOX = 5 # The 5 values are: (prob,x,y,w,h)
+
 #############
 ## classes ##
 #############
@@ -52,15 +54,22 @@ class YOLOV1(nn.Module):
             >> split_size: (int) Size for each reagion when splitting the image. 
             >> num_boxes: (int) Quantity of boxes per grid
             >> conf_file: (str)
+
+        Attributes:
+            >> device_param: (nn.Parameter) Parameter to access to the devices where the model is running more easily.
+            >> convs: (nn.ModuleList) Convolutional layers for YOLO v1.
+            >> fcl: (nn.Sequential) Fully connected layer for YOLO v1.
         """
         super(YOLOV1, self).__init__()
+        self.device_param = nn.Parameter(torch.empty(0))
+
         self.convs = load_conv_layers_from_configuration(in_chs, conf_file)
         self.fcl = nn.Sequential(
                 nn.Flatten(),
                 nn.Linear(1024 * split_size * split_size, 4096),
                 nn.Dropout(0.5),
                 nn.LeakyReLU(0.1),
-                nn.Linear(4096, split_size * split_size * (num_classes + num_boxes * 5))) # (S,S,30) where (num_classes + num_boxes * 5) = 30, and 5 is for (prob,x,y,wh)
+                nn.Linear(4096, split_size * split_size * (num_classes + num_boxes * DATA_PER_BOX))) # (S,S,30) where (num_classes + num_boxes * 5) = 30, and 5 is for (prob,x,y,w,h)
         return
 
     def forward(self, x):

@@ -1,13 +1,16 @@
 import torch
 from collections import Counter
 
+OBJ_PROB = 1
+CLASS = 0
+
 def calculate_iou(boxes_preds: torch.Tensor, boxes_labels: torch.Tensor, box_format: str):
     """
     Calculates intersection over union
     Inputs:
-        boxes_preds (tensor): Predictions of Bounding Boxes (BATCH_SIZE, 4)
-        boxes_labels (tensor): Correct Labels of Boxes (BATCH_SIZE, 4)
-        box_format (str): midpoint/corners, if boxes (x,y,w,h) or (x1,y1,x2,y2)
+        boxes_preds: (tensor [BATCH_SIZE, 4]) Predictions of Bounding Boxes 
+        boxes_labels: (tensor [BATCH_SIZE, 4]) Correct Labels of Boxes 
+        box_format (str): "midpoint"/"corners", if boxes (x,y,w,h) or (x1,y1,x2,y2)
     Returns:
         tensor: Intersection over union for all examples
     """
@@ -62,21 +65,23 @@ def non_max_suppression(bboxes, iou_threshold, threshold, box_format="corners"):
 
     assert type(bboxes) == list
 
-    bboxes = [box for box in bboxes if box[1] > threshold]
-    bboxes = sorted(bboxes, key=lambda x: x[1], reverse=True)
+    bboxes = [box for box in bboxes if box[OBJ_PROB] > threshold]
+    bboxes = sorted(bboxes, key=lambda x: x[OBJ_PROB], reverse=True) # Put boxes with higest prob at the beggining
     bboxes_after_nms = []
 
     while bboxes:
-        chosen_box = bboxes.pop(0)
+        chosen_box = bboxes.pop(0) # Box with highest prob
 
+        # Update bboxes list and keep the ones from the same class whose iou > threshold and 
+        # the ones from a different class than chosen_box's
         bboxes = [
             box
             for box in bboxes
-            if box[0] != chosen_box[0]
+            if box[CLASS] != chosen_box[CLASS]
             or calculate_iou(
                 torch.tensor(chosen_box[2:]),
                 torch.tensor(box[2:]),
-                box_format=box_format,
+                box_format,
             )
             < iou_threshold
         ]
@@ -157,7 +162,7 @@ def mean_average_precision(
             best_iou = 0
 
             for idx, gt in enumerate(ground_truth_img):
-                iou = intersection_over_union(
+                iou = calculate_iou(
                     torch.tensor(detection[3:]),
                     torch.tensor(gt[3:]),
                     box_format=box_format,

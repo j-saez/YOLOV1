@@ -9,7 +9,7 @@ from torch.utils.data import Dataset
 IMGS_CHS = 3
 IMGS_IDX = 0
 LABELS_IDX = 1
-DATASET_DIR = f'{os.getcwd()}/datasets/data/VOC'
+DATASET_DIR = f'{os.getcwd()}/datasets/data/voc'
 IMAGES_DIR = f'{DATASET_DIR}/images'
 LABELS_DIR = f'{DATASET_DIR}/labels'
 TRANSFORMS = torchvision.transforms.Compose([
@@ -26,6 +26,15 @@ class VOCDataset(Dataset):
             >> box_per_split: (int) Indicates the quantity of boxes that the model will output per split.
             >> model_in_w: (int) Indicates the width of the image for the model
             >> model_in_h: (int) Indicates the height of the image for the model
+
+        Attributes:
+            >> csv_data: (pd.DataFrame) Pandas dataframe containing the information from the csv file.
+            >> S: (int) Indicates the size of the output grids from the model.
+            >> B: (int) Quantity of box per split.
+            >> C: (int) Total quantity of classes.
+            >> model_in_w: (int) Indicates the width of the image for the model
+            >> model_in_h: (int) Indicates the height of the image for the model
+
         """
         csv_filename = f'{DATASET_DIR}/train.csv' if data_split == 'train' else f'{DATASET_DIR}/test.csv'
         self.csv_data = pd.read_csv(csv_filename)
@@ -40,6 +49,14 @@ class VOCDataset(Dataset):
         return len(self.csv_data)
 
     def __getitem__(self, idx):
+        """
+        Returns the idxth item of the dataset.
+        Inputs:
+            >> idx: (int) Idx of the data to be loaded.
+        Outputs:
+            >> image: (torch.tensor of size [chs, model_in_w, model_in_h]) Idxth image of the dataset
+            >> labels: (torch tensor [S, S, C+len(boxes)*5], where C+5 contains [c1, ..., cC, p, x, y, w, h]) Label for the idxth image of the dataset.
+        """
         img_filename = f'{IMAGES_DIR}/{self.csv_data.iloc[idx, IMGS_IDX]}'
         label_filename = f'{LABELS_DIR}/{self.csv_data.iloc[idx, LABELS_IDX]}'
 
@@ -74,7 +91,7 @@ class VOCDataset(Dataset):
             >> labels: (torch tensor [S, S, C+5]), where C+5 contains [c1, ..., cC, p, x, y, w, h]
         """
 
-        labels = torch.zeros(self.S, self.S, self.C+5)
+        labels = torch.zeros(self.S, self.S, self.C+(5*self.B))
         for box in boxes:
             # Values relative to the image
             class_label, x, y, w, h = box
@@ -88,8 +105,10 @@ class VOCDataset(Dataset):
 
             if labels[row,column,self.C] == 0:
                 one_hot_label = nn.functional.one_hot(torch.tensor(int(class_label)), self.C)
-                label = torch.cat(#
+                cell_box = torch.tensor([1, x_cell, y_cell, w_cell, h_cell])
+                # Get a label with size (B,S,S,C+(5*B)) instead of (B,S,S,C+5) so that the get_bbox works 
+                label = torch.cat(
                     dim=0,
-                    tensors=(one_hot_label, torch.tensor([1, x_cell, y_cell, w_cell, h_cell])))
+                    tensors=(one_hot_label, cell_box, torch.zeros(5)))
                 labels[row,column] = label
         return labels
