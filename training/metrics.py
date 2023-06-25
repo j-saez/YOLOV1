@@ -48,7 +48,7 @@ def calculate_iou(boxes_preds: torch.Tensor, boxes_labels: torch.Tensor, box_for
     box1_area = abs((box1_x2 - box1_x1) * (box1_y2 - box1_y1))
     box2_area = abs((box2_x2 - box2_x1) * (box2_y2 - box2_y1))
 
-    return intersection / (box1_area + box2_area - intersection + 1e-6)
+    return intersection / (box1_area + box2_area - intersection + 1e-6)
 
 def non_max_suppression(bboxes, iou_threshold, threshold, box_format="corners"):
     """

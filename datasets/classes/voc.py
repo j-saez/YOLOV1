@@ -36,6 +36,7 @@ class VOCDataset(Dataset):
             >> model_in_h: (int) Indicates the height of the image for the model
 
         """
+        #csv_filename = f'{DATASET_DIR}/train.csv' if data_split == 'train' else f'{DATASET_DIR}/test.csv'
         csv_filename = f'{DATASET_DIR}/train.csv' if data_split == 'train' else f'{DATASET_DIR}/test.csv'
         self.csv_data = pd.read_csv(csv_filename)
         self.S = img_split_size

@@ -1,11 +1,12 @@
 import os
-from PIL.Image import preinit
 import torch
+import datasets.classes as dataset_classes
 from training.metrics        import non_max_suppression
 from torch.utils.tensorboard import SummaryWriter
-from training                import YOLOV1Loss
+from training                import YOLOV1Loss, Dataparams
 
 PROB_IDX = 1
+AVAILABLE_DATASETS = ['voc']
 
 def convert_cellboxes(predictions, S=7):
     """
@@ -67,7 +68,6 @@ def get_bboxes(loader: torch.utils.data.DataLoader, model: torch.nn.Module, iou_
     train_idx = 0
 
     for batch_idx, (x, labels) in enumerate(loader):
-        print(f'Getting boxes for batch_idx {batch_idx}/{len(loader)}', end='\r')
         x = x.to(device)
         labels = labels.to(device)
 
@@ -212,5 +212,27 @@ def test_model(model: torch.nn.Module, dataloader: torch.utils.data.DataLoader, 
             loss = criterion(predictions, labels)
             loss_list.append(loss)
 
+    model.train()
     test_avg_loss = sum(loss_list) / len(loss_list)
     return test_avg_loss
+
+def load_dataset(dataparams: Dataparams, split: str):
+    """
+    Loads the desired dataset with the parameters especified in the dataparams object.
+    Inputs:
+        >> dataparams: (training.config.Dataparams) Contains all the required params to load the dataset.
+        >> split: (str) Split to be loaded (train or test).
+    Outputs:
+        >> dataset: (torch.utils.data.Dataset) Loaded dataset object.
+    """
+    if dataparams.dataset_name == 'voc':
+        dataset = dataset_classes.VOCDataset(
+            data_split = split,
+            img_split_size = dataparams.img_split_size,
+            box_per_split = dataparams.box_per_split,
+            model_in_w = dataparams.model_in_h,
+            model_in_h = dataparams.model_in_w)
+    else:
+        raise ValueError(f'{dataparams.dataset_name} is not a valid dataset name. The available ones are {AVAILABLE_DATASETS}')
+
+    return dataset
