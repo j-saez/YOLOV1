@@ -2,15 +2,18 @@ import torch
 import torch.optim as optim
 from datasets.classes            import VOCDataset
 from torch.utils.data.dataloader import DataLoader
-from training                    import YOLOV1Loss, Config
+from training                    import YOLOV1Loss, Config, YOLOV1LrScheduler
 from models                      import YOLOV1
 from tqdm                        import tqdm
 from training.utils              import get_bboxes, load_tensorboard_writer, load_checkpoint, save_checkpoint, test_model, load_dataset
 from training.metrics            import mean_average_precision
 
-# Enables cuDNN (CUDA Deep Neural Network library) to find the best algorithm
-# configuration for the specific input size and hardware that is being used.
+# Enables cuDNN (CUDA Deep Neural Network library) to find the best algorithm configuration for the specific input size and hardware that is being used.
 torch.backends.cudnn.benchmark = True
+
+# Check for nan loss
+torch.autograd.set_detect_anomaly(True)         
+
 seed = 123
 torch.manual_seed(seed)
 
@@ -116,6 +119,7 @@ if __name__== "__main__":
                 pred_boxes, labels_boxes = get_bboxes( test_dataloader, model, iou_threshold=config.hyperparams.iou_threshold, threshold=0.4)
                 test_mAP = mean_average_precision(pred_boxes, labels_boxes, iou_threshold=config.hyperparams.iou_threshold, box_format=config.hyperparams.box_format)
                 writer.add_scalars(f'mAP/', {'Train': train_mAP, 'Test': test_mAP}, step)
+
                 print(f'************* Epoch {epoch}: Train mAP = {train_mAP:.4f} --- Test mAP = {test_mAP:.4f} --- Mean loss = {sum(mean_train_epoch_loss)/len(mean_train_epoch_loss):.4f}  *************')
 
                 mean_test_loss = test_model(model, test_dataloader, criterion)

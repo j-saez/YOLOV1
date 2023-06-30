@@ -12,9 +12,6 @@ LABELS_IDX = 1
 DATASET_DIR = f'{os.getcwd()}/datasets/data/voc'
 IMAGES_DIR = f'{DATASET_DIR}/images'
 LABELS_DIR = f'{DATASET_DIR}/labels'
-TRANSFORMS = torchvision.transforms.Compose([
-    torchvision.transforms.ToTensor(), 
-    torchvision.transforms.Normalize([0.5 for _ in range(IMGS_CHS)],[0.5 for _ in range(IMGS_CHS)])])
 
 class VOCDataset(Dataset):
     def __init__(self,data_split: str, img_split_size: int, box_per_split: int, model_in_w: int, model_in_h: int):
@@ -32,18 +29,29 @@ class VOCDataset(Dataset):
             >> S: (int) Indicates the size of the output grids from the model.
             >> B: (int) Quantity of box per split.
             >> C: (int) Total quantity of classes.
-            >> model_in_w: (int) Indicates the width of the image for the model
-            >> model_in_h: (int) Indicates the height of the image for the model
+            >> transform: (torchvision.transforms.Compose) Transforamtion for the input images.
 
         """
         #csv_filename = f'{DATASET_DIR}/train.csv' if data_split == 'train' else f'{DATASET_DIR}/test.csv'
-        csv_filename = f'{DATASET_DIR}/train.csv' if data_split == 'train' else f'{DATASET_DIR}/test.csv'
+        csv_filename = f'{DATASET_DIR}/100examples.csv' if data_split == 'train' else f'{DATASET_DIR}/8examples.csv'
         self.csv_data = pd.read_csv(csv_filename)
         self.S = img_split_size
         self.B = box_per_split
         self.C = 20 # this dataset contains 20 classes
-        self.model_in_w = model_in_w
-        self.model_in_h = model_in_h
+
+        train_transform = torchvision.transforms.Compose([
+            torchvision.transforms.RandomAffine(degrees=0, scale=(0.8, 1.2)),
+            torchvision.transforms.ColorJitter(brightness=0, contrast=0, saturation=0.5, hue=0),
+            torchvision.transforms.Resize(size=(model_in_h, model_in_w)), 
+            torchvision.transforms.ToTensor(),])
+
+        test_transform = torchvision.transforms.Compose([
+            torchvision.transforms.Resize(size=(model_in_h, model_in_w)), 
+            torchvision.transforms.ToTensor(),])
+
+        #self.transform = train_transform if data_split == 'train' else test_transform
+        self.transform = train_transform if data_split == 'train' else test_transform
+
         return
 
     def __len__(self):
@@ -69,8 +77,8 @@ class VOCDataset(Dataset):
                 boxes.append([float(item) for item in box])
 
         # Image to [-1, 1] tensor
-        img = Image.open(img_filename).resize((self.model_in_w, self.model_in_h))
-        img = TRANSFORMS(img)
+        img = Image.open(img_filename)
+        img = self.transform(img)
 
         # Create labels from the boxes
         label = self.__create_label__(boxes)

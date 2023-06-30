@@ -102,7 +102,7 @@ def get_training_args():
     parser.add_argument( '--lr',                 type=float, default=2e-5,       help='Learning rate' )
     parser.add_argument( '--batch-size',         type=int,   default=8,          help='Batch size.' )
     parser.add_argument( '--weight-decay',       type=float, default=0.0,        help='Weight decay for Adam optimizer' )
-    parser.add_argument( '--epochs',             type=int,   default=300,        help='Total training epochs' )
+    parser.add_argument( '--epochs',             type=int,   default=135,        help='Total training epochs' )
     parser.add_argument( '--box-format',         type=str,   default='midpoint', help='Format of the bounding boxes "midpoint" or "corners".' )
     parser.add_argument( '--iou-threshold',      type=float, default=0.5,        help='Threshold for intersection over union (IoU).' )
     parser.add_argument( '--loss-lambda-coord',  type=float, default=5,          help='Lambda coord value for the loss function.' )

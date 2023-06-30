@@ -43,8 +43,8 @@ class YOLOV1Loss(nn.Module):
     def forward(self, predictions: torch.Tensor, labels: torch.Tensor):
         """
         Inputs:
-            >> predictions: (torch.Tensor [B, S, S, classes * (5*model_out_boxes)]) TODO
-            >> labels: (torch.Tensor [B, S, S, classes * 5])
+            >> predictions: (torch.Tensor [B, S * S * classes * (5 * model_out_boxes)]) yolov1 output
+            >> labels: (torch.Tensor [B, S, S, classes * 5]) 
         Outputs:
             >> loss: (torch tensor) Values of the yolov1 loss following the formula that apppears on the paper.
         """

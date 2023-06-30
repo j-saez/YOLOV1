@@ -200,10 +200,11 @@ def test_model(model: torch.nn.Module, dataloader: torch.utils.data.DataLoader, 
     Outputs:
         >> test_avg_loss: (float) Average test loss.
     """
-    loss_list = []
+    model.eval()
     device = model.device_param.device
+
+    loss_list = []
     with torch.no_grad():
-        model.eval()
         for imgs, labels in dataloader: 
             imgs = imgs.to(device)
             labels = labels.to(device)

@@ -74,6 +74,7 @@ class YOLOV1(nn.Module):
 
     def forward(self, x):
         """
+        Performs the forward step for YOLO V1
         Inputs:
             >> x: (torch.Tensor [B, CHS, H, W])
         Outpus:
