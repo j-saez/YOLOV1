@@ -57,6 +57,7 @@ if __name__== "__main__":
         in_chs=train_dataset[0][0].size()[0],
         num_classes=train_dataset.C,
         split_size=config.dataparams.img_split_size,
+        backbone=config.hyperparams.backbone,
         num_boxes=config.dataparams.box_per_split).to(device)
 
     # Create the tensorboard writer

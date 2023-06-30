@@ -1,4 +1,5 @@
 import torch
+import torchvision
 import torch.nn as nn
 from models.utils import load_conv_layers_from_configuration
 
@@ -45,7 +46,7 @@ DATA_PER_BOX = 5 # The 5 values are: (prob,x,y,w,h)
 class YOLOV1(nn.Module):
 
     # In the original paper: num_classes = 20 (COCO dataset), split_size = 7, num_boxes = 2
-    def __init__(self, in_chs: int, num_classes: int, split_size: int, num_boxes: int, conf_file: str='./models/configurations/default.txt', **kwargs):
+    def __init__(self, in_chs: int, num_classes: int, split_size: int, num_boxes: int, backbone: str, conf_file: str='./models/configurations/default.txt', **kwargs):
         """
         YOLO v1 implementation
         Inputs:
@@ -54,6 +55,7 @@ class YOLOV1(nn.Module):
             >> split_size: (int) Size for each reagion when splitting the image. 
             >> num_boxes: (int) Quantity of boxes per grid
             >> conf_file: (str)
+            >> backbone: (str) darknet19 or resnet50
 
         Attributes:
             >> device_param: (nn.Parameter) Parameter to access to the devices where the model is running more easily.
@@ -63,7 +65,17 @@ class YOLOV1(nn.Module):
         super(YOLOV1, self).__init__()
         self.device_param = nn.Parameter(torch.empty(0))
 
-        self.convs = load_conv_layers_from_configuration(in_chs, conf_file)
+        if backbone == 'darknet19':
+            self.backbone = load_conv_layers_from_configuration(in_chs, conf_file)
+
+        elif backbone == 'resnet50':
+            resnet50 = torchvision.models.resnet50(weights=torchvision.models.ResNet50_Weights.IMAGENET1K_V2)
+            resnet50 = nn.Sequential(*list(resnet50.children()))[:-2] 
+            self.backbone = nn.Sequential( resnet50, torch.nn.Conv2d(2048, 1024, kernel_size=3, stride=2, padding=1),)
+
+        else:
+            raise ValueError(f'backbone {backbone} is not allowed. Choose between darknet19 or resnet50')
+
         self.fcl = nn.Sequential(
                 nn.Flatten(),
                 nn.Linear(1024 * split_size * split_size, 4096),
@@ -80,6 +92,6 @@ class YOLOV1(nn.Module):
         Outpus:
             >> x: (torch.Tensor [B, split_size * split_size * (num_classes + num_boxes * 5)])
         """
-        x = self.convs(x)
+        x = self.backbone(x)
         x = self.fcl(x)
         return x

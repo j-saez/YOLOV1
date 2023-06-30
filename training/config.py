@@ -43,6 +43,7 @@ class Hyperparams:
     iou_threshold: int
     loss_lambda_coord: float
     loss_lambda_nocoord: float
+    backbone: str
 
     def __str__(self):
         output = 'Hyperparams:\n'
@@ -54,6 +55,7 @@ class Hyperparams:
         output += f'\tIoU threshold: {self.iou_threshold}\n' 
         output += f'\tLoss lambda coord: {self.loss_lambda_coord}\n' 
         output += f'\tLoss lambda nocoord: {self.loss_lambda_nocoord}\n' 
+        output += f'\tModel backbone: {self.backbone}\n' 
         return output
 
 class Config:
@@ -67,7 +69,8 @@ class Config:
             args.box_format,
             args.iou_threshold,
             args.loss_lambda_coord,
-            args.loss_lambda_nocoord)
+            args.loss_lambda_nocoord,
+            args.backbone)
 
         self.dataparams = Dataparams(
             args.dataset_name,
@@ -99,14 +102,15 @@ def get_training_args():
     parser = argparse.ArgumentParser(description='Arguments for pix2pix inference.')
 
     # Hyperparams
-    parser.add_argument( '--lr',                 type=float, default=2e-5,       help='Learning rate' )
+    parser.add_argument( '--lr',                 type=float, default=1e-4,       help='Learning rate' )
     parser.add_argument( '--batch-size',         type=int,   default=8,          help='Batch size.' )
-    parser.add_argument( '--weight-decay',       type=float, default=0.0,        help='Weight decay for Adam optimizer' )
-    parser.add_argument( '--epochs',             type=int,   default=135,        help='Total training epochs' )
+    parser.add_argument( '--weight-decay',       type=float, default=0.0005,     help='Weight decay for Adam optimizer' )
+    parser.add_argument( '--epochs',             type=int,   default=180,        help='Total training epochs' )
     parser.add_argument( '--box-format',         type=str,   default='midpoint', help='Format of the bounding boxes "midpoint" or "corners".' )
     parser.add_argument( '--iou-threshold',      type=float, default=0.5,        help='Threshold for intersection over union (IoU).' )
     parser.add_argument( '--loss-lambda-coord',  type=float, default=5,          help='Lambda coord value for the loss function.' )
     parser.add_argument( '--loss-lambda-nocoord',type=float, default=0.5,        help='Lambda no coord value for the loss function.' )
+    parser.add_argument( '--backbone',           type=str,   default='darknet19',help='Choose between resnet50 or darknet19.' )
 
     # Dataparams
     parser.add_argument( '--dataset-name',    type=str,   default='voc', help='Dataset name.' )
