@@ -160,7 +160,7 @@ def load_tensorboard_writer(config):
     """
     tensorboard_dir = os.getcwd()+'/runs/tensorboard/'
     checkpoints_dir = os.getcwd()+'/runs/checkpoints/'
-    training_dir_name = f'YOLO_{config.dataparams.dataset_name}_bs{config.hyperparams.batch_size}_lr{config.hyperparams.lr}_e{config.hyperparams.epochs}'
+    training_dir_name = f'YOLO_{config.hyperparams.backbone}Backbone_{config.dataparams.dataset_name}Dataset_bs{config.hyperparams.batch_size}_lr{config.hyperparams.lr}_e{config.hyperparams.epochs}'
     model_logs_dir = os.getcwd() + '/runs/tensorboard/' + training_dir_name
     model_checkpoints_dir = os.getcwd() + '/runs/checkpoints/' + training_dir_name
 

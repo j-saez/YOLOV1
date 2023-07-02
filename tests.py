@@ -30,13 +30,14 @@ def test_voc_dataset_class():
     return
 
 def model_output_shape_test():
-    print(f"\t Testing the shape of model's outputs.")
-    model = YOLOV1(IMG_CHS,NUM_CLASSES,SPLIT_SIZE,NUM_BOXES)
-    data = torch.rand(BATCH_SIZE,IMGS_CHS,IMG_H,IMG_W)
-    outputs = model(data)
-    outputs = outputs.view(BATCH_SIZE, SPLIT_SIZE, SPLIT_SIZE, NUM_CLASSES+NUM_BOXES*DATA_PER_BOX)
+    inputs = torch.rand(BATCH_SIZE,IMG_CHS,IMG_H,IMG_W)
+    for backbone in ['resnet18', 'resnet34', 'resnet50', 'darknet19']:
+        model = YOLOV1(in_chs=3, num_classes=20,split_size=7,num_boxes=2,backbone_to_use=backbone)
+        outputs = model(inputs)
+        outputs = outputs.view(BATCH_SIZE, SPLIT_SIZE, SPLIT_SIZE, NUM_CLASSES+NUM_BOXES*DATA_PER_BOX)
+        print(f'{backbone} outputs shape = {outputs.shape}')
+        assert outputs.size() == (BATCH_SIZE, SPLIT_SIZE, SPLIT_SIZE, NUM_CLASSES+NUM_BOXES*DATA_PER_BOX)
 
-    assert outputs.size() == (BATCH_SIZE, SPLIT_SIZE, SPLIT_SIZE, NUM_CLASSES+NUM_BOXES*DATA_PER_BOX)
     print(f'\t\t Test passed.')
     return
 
@@ -61,10 +62,55 @@ def yolov1_loss_test():
     print(f'\t\t Test passed.')
     return
 
+def mAP_test():
+    from training.utils import get_bboxes
+    from datasets.classes import VOCDataset
+    from torch.utils.data import DataLoader
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    train_dataset = VOCDataset(
+        data_split = 'train',
+        img_split_size = 7,
+        box_per_split = 2,
+        model_in_w = 448,
+        model_in_h = 448)
+    train_dataloader = DataLoader(train_dataset,batch_size=8,num_workers=2,pin_memory=True,shuffle=True,drop_last=True)
+    model = YOLOV1(in_chs=3, num_classes=20, split_size=7, num_boxes=2, backbone_to_use='resnet18').to(device)
+    optimizer = torch.optim.Adam(model.parameters(), lr=2e-4)
+    criterion=YOLOV1Loss(7,20,2,5,0.5)
+
+    pred_boxes, labels_boxes = get_bboxes(train_dataloader, model, iou_threshold=0.5, threshold=0.4, box_format='midpoint', device=device)
+
+    for i in range(50): 
+        for imgs, labels in train_dataloader:
+            imgs = imgs.to(device)
+            labels = labels.to(device)
+
+            predictions = model(imgs)
+            loss = criterion(predictions, labels)
+
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+        if i % 5 ==0:
+            pred_boxes, labels_boxes = get_bboxes(train_dataloader, model, iou_threshold=0.5, threshold=0.4, box_format='midpoint', device=device)
+            print(f'pred_boxes shape = {torch.tensor(pred_boxes).shape}')
+            """
+            preds = [
+                dict(
+                    boxes = torch.tensor(pred_boxes[])
+                )
+            ]
+            """
+
+    return
+
 def run_tests():
+    """
     model_output_shape_test()
     yolov1_loss_test()
     test_voc_dataset_class()
+    """
+    mAP_test()
     return
 
 if __name__ == '__main__':

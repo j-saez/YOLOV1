@@ -1,19 +1,15 @@
 import torch
 import torch.optim as optim
-from datasets.classes            import VOCDataset
-from torch.utils.data.dataloader import DataLoader
-from training                    import YOLOV1Loss, Config, YOLOV1LrScheduler
-from models                      import YOLOV1
-from tqdm                        import tqdm
-from training.utils              import get_bboxes, load_tensorboard_writer, load_checkpoint, save_checkpoint, test_model, load_dataset
-from training.metrics            import mean_average_precision
+from datasets.classes               import VOCDataset
+from torch.utils.data.dataloader    import DataLoader
+from training                       import YOLOV1Loss, Config
+from models                         import YOLOV1
+from tqdm                           import tqdm
+from training.utils                 import get_bboxes, load_tensorboard_writer, load_checkpoint, save_checkpoint, test_model, load_dataset
+from training.metrics               import mean_average_precision
 
 # Enables cuDNN (CUDA Deep Neural Network library) to find the best algorithm configuration for the specific input size and hardware that is being used.
 torch.backends.cudnn.benchmark = True
-
-# Check for nan loss
-torch.autograd.set_detect_anomaly(True)         
-
 seed = 123
 torch.manual_seed(seed)
 
@@ -57,7 +53,7 @@ if __name__== "__main__":
         in_chs=train_dataset[0][0].size()[0],
         num_classes=train_dataset.C,
         split_size=config.dataparams.img_split_size,
-        backbone=config.hyperparams.backbone,
+        backbone_to_use=config.hyperparams.backbone,
         num_boxes=config.dataparams.box_per_split).to(device)
 
     # Create the tensorboard writer
@@ -76,6 +72,8 @@ if __name__== "__main__":
         model.parameters(),
         lr=config.hyperparams.lr,
         weight_decay=config.hyperparams.weight_decay)
+
+    #scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[75, 105], gamma=0.1)
 
     # Load pretrained weigths for the model
     if config.general.pretrained_weights is not None:
@@ -108,6 +106,8 @@ if __name__== "__main__":
 
             if batch_idx % 100 == 0:
                 print(f'Epoch: {epoch}/{config.hyperparams.epochs} ==> Batch: {batch_idx}/{len(train_dataloader)} ==> Mean loss: {sum(mean_train_epoch_loss)/len(mean_train_epoch_loss):.4f}', end='\r')
+
+        #scheduler.step()
 
         if epoch % config.general.test_model_epoch == 0:
             with torch.no_grad():

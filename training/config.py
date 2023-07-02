@@ -2,6 +2,7 @@ import torch
 import argparse
 from dataclasses import dataclass
 
+
 @dataclass
 class Generalparams:
     pretrained_weights: str
@@ -102,7 +103,7 @@ def get_training_args():
     parser = argparse.ArgumentParser(description='Arguments for pix2pix inference.')
 
     # Hyperparams
-    parser.add_argument( '--lr',                 type=float, default=1e-4,       help='Learning rate' )
+    parser.add_argument( '--lr',                 type=float, default=2e-5,       help='Learning rate' )
     parser.add_argument( '--batch-size',         type=int,   default=8,          help='Batch size.' )
     parser.add_argument( '--weight-decay',       type=float, default=0.0005,     help='Weight decay for Adam optimizer' )
     parser.add_argument( '--epochs',             type=int,   default=180,        help='Total training epochs' )

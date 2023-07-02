@@ -1,7 +1,6 @@
 import torch
-import torchvision
 import torch.nn as nn
-from models.utils import load_conv_layers_from_configuration
+import models.backbones as backbones
 
 """
 YOLO algorithm: (All the following applies for every cell)
@@ -38,60 +37,77 @@ The predictions shape for one image is: (S,S,30), where 20 are for the class pre
 """
 
 DATA_PER_BOX = 5 # The 5 values are: (prob,x,y,w,h)
-
-#############
-## classes ##
-#############
+AVAILABLE_BACKBONES = ['resnet50', 'resnet34', 'resnet18', 'darknet19']
 
 class YOLOV1(nn.Module):
 
-    # In the original paper: num_classes = 20 (COCO dataset), split_size = 7, num_boxes = 2
-    def __init__(self, in_chs: int, num_classes: int, split_size: int, num_boxes: int, backbone: str, conf_file: str='./models/configurations/default.txt', **kwargs):
+    def __init__(self, in_chs: int, num_classes: int, split_size: int, num_boxes: int, backbone_to_use: str):
         """
-        YOLO v1 implementation
+        YOLOV1 pytorch implementation. It is possible to use different backbones as the original darknet19 or different
+        models of resnet (resnet18, resnet34, resnet50).
         Inputs:
-            >> in_chs: (int) number of input channels
-            >> num_classes: (int) number of classes
-            >> split_size: (int) Size for each reagion when splitting the image. 
-            >> num_boxes: (int) Quantity of boxes per grid
-            >> conf_file: (str)
-            >> backbone: (str) darknet19 or resnet50
-
+            >> in_chs: (int) Number of channels in the input images
+            >> num_classes: (int) Number of classes present in the dataset.
+            >> split_size: (int) Size of each cell when splitting the image.
+            >> num_boxes: (int) Number of boxes per cell.
         Attributes:
-            >> device_param: (nn.Parameter) Parameter to access to the devices where the model is running more easily.
-            >> convs: (nn.ModuleList) Convolutional layers for YOLO v1.
-            >> fcl: (nn.Sequential) Fully connected layer for YOLO v1.
+            >> model: (nn.Module) YOLOV1 model.
         """
         super(YOLOV1, self).__init__()
         self.device_param = nn.Parameter(torch.empty(0))
 
-        if backbone == 'darknet19':
-            self.backbone = load_conv_layers_from_configuration(in_chs, conf_file)
+        backbone, backbone_out_feat = load_backbone(backbone_to_use, in_chs)
+        fcl = nn.Sequential(
+            nn.Flatten(),
+            nn.Linear(backbone_out_feat * split_size * split_size, 4096),
+            nn.Dropout(0.5),
+            nn.LeakyReLU(0.1),
+            nn.Linear(4096, split_size * split_size * (num_classes + num_boxes * DATA_PER_BOX))) # (S,S,30) where (num_classes + num_boxes * 5) = 30, and 5 is for (prob,x,y,w,h)
 
-        elif backbone == 'resnet50':
-            resnet50 = torchvision.models.resnet50(weights=torchvision.models.ResNet50_Weights.IMAGENET1K_V2)
-            resnet50 = nn.Sequential(*list(resnet50.children()))[:-2] 
-            self.backbone = nn.Sequential( resnet50, torch.nn.Conv2d(2048, 1024, kernel_size=3, stride=2, padding=1),)
+        self.model = nn.Sequential(
+            backbone,
+            fcl)
 
-        else:
-            raise ValueError(f'backbone {backbone} is not allowed. Choose between darknet19 or resnet50')
-
-        self.fcl = nn.Sequential(
-                nn.Flatten(),
-                nn.Linear(1024 * split_size * split_size, 4096),
-                nn.Dropout(0.5),
-                nn.LeakyReLU(0.1),
-                nn.Linear(4096, split_size * split_size * (num_classes + num_boxes * DATA_PER_BOX))) # (S,S,30) where (num_classes + num_boxes * 5) = 30, and 5 is for (prob,x,y,w,h)
-        return
-
-    def forward(self, x):
+    def forward(self, images: torch.tensor):
         """
-        Performs the forward step for YOLO V1
+        Performs the forward step for yolov1.
         Inputs:
-            >> x: (torch.Tensor [B, CHS, H, W])
-        Outpus:
-            >> x: (torch.Tensor [B, split_size * split_size * (num_classes + num_boxes * 5)])
+            >> images: (torch.tensor [Batch, CHS, IMG_H, IMG_W])
+        Outputs:
+            >> predictions: (torch.tensor [Batch, S*S*(num_classes + num_boxes * DATA_PER_BOX)])
         """
-        x = self.backbone(x)
-        x = self.fcl(x)
-        return x
+        return self.model(images)
+
+def load_backbone(backbone_name: str, in_chs: int):
+    """
+    Loads the especified backbone.
+    Inputs:
+        >> backbone_name: (str) Name of the backbone (resnet50, resnet34, resnet18 or darknet19)
+        >> in_chs: (int) Quantity of input chs.
+    Outputs:
+        >> backbone: (nn.Module) Backbone network
+        >> backbone_out_feat: (int) Number of output chs by the backbone
+    """
+    backbone = nn.Module()
+    backbone_out_feat = -1
+
+    if backbone_name == 'darknet19':
+        backbone = backbones.Darknet19Backbone(in_chs)
+        backbone_out_feat = 1024
+
+    elif backbone_name == 'resnet50':
+        backbone = backbones.Resnet50Backbone(in_chs)
+        backbone_out_feat = 2048
+
+    elif backbone_name == 'resnet34':
+        backbone = backbones.Resnet34Backbone(in_chs)
+        backbone_out_feat = 512
+
+    elif backbone_name == 'resnet18':
+        backbone = backbones.Resnet34Backbone(in_chs)
+        backbone_out_feat = 512
+
+    else:
+        raise ValueError(f'{backbone_name} is not a valid option. You can choose between {AVAILABLE_BACKBONES}.')
+
+    return backbone, backbone_out_feat
