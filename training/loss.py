@@ -5,6 +5,7 @@
 import torch
 import torch.nn as nn
 from training.metrics import calculate_iou
+from typing import Dict
 
 #############
 ## globals ##
@@ -21,7 +22,7 @@ H_IDX = 24
 #############
 
 class YOLOV1Loss(nn.Module):
-    def __init__(self, split_size: int, num_classes: int, num_boxes: int, lambda_coord: float, lambda_noobj: float):
+    def __init__(self, conf: Dict):
         """
         Computes the loss from the yolov1 paper
         Inputs:
@@ -33,18 +34,18 @@ class YOLOV1Loss(nn.Module):
         """
         super().__init__()
         self.mse = nn.MSELoss(reduction="sum") # In the paper they do not average it.
-        self.S = split_size
-        self.C = num_classes
-        self.B = num_boxes
-        self.lambda_noobj = lambda_noobj
-        self.lambda_coord = lambda_coord
+        self.S = conf["model"]["split_size"]
+        self.C = conf["dataset"]["num_classes"]
+        self.B = conf["model"]["num_boxes"]
+        self.lambda_noobj = conf["hyperparams"]["lambda_noobj"]
+        self.lambda_coord = conf["hyperparams"]["lambda_coord"]
         return
 
     def forward(self, predictions: torch.Tensor, labels: torch.Tensor):
         """
         Inputs:
             >> predictions: (torch.Tensor [B, S * S * classes * (5 * model_out_boxes)]) yolov1 output
-            >> labels: (torch.Tensor [B, S, S, classes * 5]) 
+            >> labels: (torch.Tensor [B, S, S, classes * 5])
         Outputs:
             >> loss: (torch tensor) Values of the yolov1 loss following the formula that apppears on the paper.
         """
@@ -86,5 +87,12 @@ class YOLOV1Loss(nn.Module):
         prob_labels = thereis_object * labels[...,0:20]
         prob_loss = self.mse(prob_predictions, prob_labels)
 
-        loss = self.lambda_coord * box_loss + object_loss + self.lambda_noobj * noobject_loss + prob_loss
-        return loss
+        yolov1_loss_val = self.lambda_coord * box_loss + object_loss + self.lambda_noobj * noobject_loss + prob_loss
+        return [
+            yolov1_loss_val,
+            box_loss,
+            object_loss,
+            noobject_loss,
+            prob_loss
+        ]
+
