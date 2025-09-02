@@ -1,113 +1,164 @@
 import torch
+from torchmetrics.detection.mean_ap import MeanAveragePrecision
 import torch.nn as nn
-import models.backbones as backbones
+import pytorch_lightning as torch_lightning
+from models import backbones
+from training.loss import YOLOV1Loss
+from typing import Dict
 
-"""
-YOLO algorithm: (All the following applies for every cell)
-    The image is splitted into a grid of SxS cells. Each cell will output a predictions with the corresponding bounding box.
-    We just one one bounding box for each object in the image, so do we make sure that only one bbox will be outputed for each object.
-    The idea is that we will find one cell responsible for outputing that object. That responsible cell is the one that contains the 
-    objects midpoints.
+class YOLOV1(torch_lightning.LightningModule):
 
-    Each of these cells will start with (0,0) at the top-left corner and bottom-right will be (1,1). EACH OUTPUT AN LABEL WILL BE
-    RELATIVE TO THE CELL. Each bbox for each cell will have:
-        [x,y,w,h], where (x,y) is the coordinates of the midpoint and w,h are the width and height of the bbox.
-        x,y will be [0,1]
-        w,h can be larger than 1 if the object is wider and/or taller than the cell.
+    def __init__( self, conf: Dict):
+        super().__init__()
+        self.conf = conf
 
-Shape of the labels:
-    label_cell = [c1,c2,...,c20,p_c,x,y,w,h]
-    where cx refers to the different classes,
-    p_c to the probability that there is an object in that cell (1 or 0).
+        split_size = self.conf["model"]["split_size"]
+        num_boxes = self.conf["model"]["num_boxes"]
+        num_classes = self.conf["dataset"]["num_classes"]
+        data_per_box = 5 # The 5 values are: (prob,x,y,w,h)
 
-Shape of the predictions:
-    Predictions will look very similar, but we will output two bboxes, so that they will specialize to output different bounding boxes (wide vs tall).
-    pred_cell = [c1,c2,c..,c20,p_c1,x1,y1,w1,h1,p_c2,x2,y2,w2,h2]
-    where:
-        cx refers to the class.
-        p_c1 refers to the probability that tere is an object for bbox 1.
-        x1,y1,w1,h1 is the bbox 1
-        p_c2 refers to the probability that tere is an object for bbox 2.
-        x2,y2,w2,h2 is the bbox 2
+        backbone, backbone_out_feat = backbones.load(
+            self.conf["model"]["backbone"],
+            self.conf["dataset"]["data_chs"],
+        )
 
-Note: A CELL CAN ONLY DECTECT ONE OBJECT. This is a limitation of yolo.
 
-The target shape for one image is: (S,S,25), where 20 are for the class predictions (if having 20 classes), 21 will be for the prob and the 4 remaining are for the bbox.
-The predictions shape for one image is: (S,S,30), where 20 are for the class predictions (if having 20 classes), 21 will be for the prob and the 4 remaining are for the bbox. 25 will be for prob2 and the other four are for the second bbox.
-"""
-
-DATA_PER_BOX = 5 # The 5 values are: (prob,x,y,w,h)
-AVAILABLE_BACKBONES = ['resnet50', 'resnet34', 'resnet18', 'darknet19']
-
-class YOLOV1(nn.Module):
-
-    def __init__(self, in_chs: int, num_classes: int, split_size: int, num_boxes: int, backbone_to_use: str):
-        """
-        YOLOV1 pytorch implementation. It is possible to use different backbones as the original darknet19 or different
-        models of resnet (resnet18, resnet34, resnet50).
-        Inputs:
-            >> in_chs: (int) Number of channels in the input images
-            >> num_classes: (int) Number of classes present in the dataset.
-            >> split_size: (int) Size of each cell when splitting the image.
-            >> num_boxes: (int) Number of boxes per cell.
-        Attributes:
-            >> model: (nn.Module) YOLOV1 model.
-        """
-        super(YOLOV1, self).__init__()
-        self.device_param = nn.Parameter(torch.empty(0))
-
-        backbone, backbone_out_feat = load_backbone(backbone_to_use, in_chs)
         fcl = nn.Sequential(
             nn.Flatten(),
             nn.Linear(backbone_out_feat * split_size * split_size, 4096),
             nn.Dropout(0.5),
             nn.LeakyReLU(0.1),
-            nn.Linear(4096, split_size * split_size * (num_classes + num_boxes * DATA_PER_BOX))) # (S,S,30) where (num_classes + num_boxes * 5) = 30, and 5 is for (prob,x,y,w,h)
+            # (S,S,30) where (num_classes + num_boxes * 5) = 30, and 5 is for (prob,x,y,w,h)
+            nn.Linear(4096, split_size * split_size * (num_classes + num_boxes * data_per_box))
+        )
 
-        self.model = nn.Sequential(
-            backbone,
-            fcl)
+        self.model = nn.Sequential(backbone, fcl)
+        self.loss_function = YOLOV1Loss(conf)
+        self.metric = MeanAveragePrecision()
 
-    def forward(self, images: torch.tensor):
+        return
+
+    def training_step(self, images: torch.Tensor, labels: torch.Tensor, batch_idx: int):
+        with torch.cuda.amp.autocast():
+            preds = self.model(images)
+            loss_list = self.loss_function(preds,labels)
+            [
+                yolov1_loss,
+                box_loss,
+                object_loss,
+                noobject_loss,
+                prob_loss
+            ] = loss_list
+
+            # on_step = True --> Logs the metric at the current step
+            # on_epoch = True --> Automatically accumlates and logs at the end of the epoch
+            self.log_dict({
+                f"train_yolov1_loss": yolov1_loss,
+                f"train_box_loss": box_loss,
+                f"train_object_loss": object_loss,
+                f"train_no_object_loss": noobject_loss,
+                f"train_prob_loss": prob_loss,
+            }, on_step=False, on_epoch=True)
+        return
+
+    def validation_step(self, images: torch.Tensor, labels: torch.Tensor, batch_idx: int):
+        with torch.cuda.amp.autocast(), torch.no_grad():
+            preds = self.model(images)
+            loss_list = self.loss_function(preds,labels)
+            [
+                yolov1_loss,
+                box_loss,
+                object_loss,
+                noobject_loss,
+                prob_loss
+            ] = loss_list
+
+            # on_step = True --> Logs the metric at the current step
+            # on_epoch = True --> Automatically accumlates and logs at the end of the epoch
+            self.log_dict({
+                f"val_yolov1_loss": yolov1_loss,
+                f"val_box_loss": box_loss,
+                f"val_object_loss": object_loss,
+                f"val_no_object_loss": noobject_loss,
+                f"val_prob_loss": prob_loss,
+            }, on_step=False, on_epoch=True)
+
+            self.metric.update(
+                self.to_torchmetrics_format(preds),
+                self.to_torchmetrics_format(labels),
+            )
+        return
+
+    def test_step(self, images: torch.Tensor, labels: torch.Tensor, batch_idx: int):
+        with torch.cuda.amp.autocast(), torch.no_grad():
+            preds = self.model(images)
+            loss_list = self.loss_function(preds,labels)
+            [
+                yolov1_loss,
+                box_loss,
+                object_loss,
+                noobject_loss,
+                prob_loss
+            ] = loss_list
+
+            # on_step = True --> Logs the metric at the current step
+            # on_epoch = True --> Automatically accumlates and logs at the end of the epoch
+            self.log_dict({
+                f"test_yolov1_loss": yolov1_loss,
+                f"test_box_loss": box_loss,
+                f"test_object_loss": object_loss,
+                f"test_no_object_loss": noobject_loss,
+                f"test_prob_loss": prob_loss,
+            }, on_step=False, on_epoch=True)
+
+            self.metric.update(
+                self.to_torchmetrics_format(preds),
+                self.to_torchmetrics_format(labels),
+            )
+        return
+
+    def on_validation_epoch_end(self):
+        with torch.cuda.amp.autocast(), torch.no_grad():
+            results = self.metric.compute()
+            self.log("val/mAP", results["map"])
+            self.log("val/mAP50", results["map_50"])
+            self.log("val/Recall", results["mar_100"])
+
+            # Reset for next epoch
+            self.metric.reset()
+        return
+
+    def on_test_epoch_end(self):
+        with torch.cuda.amp.autocast(), torch.no_grad():
+            results = self.metric.compute()
+            self.log("test/mAP", results["map"])
+            self.log("test/mAP50", results["map_50"])
+            self.log("test/Recall", results["mar_100"])
+
+            # Reset for next epoch
+            self.metric.reset()
+        return
+
+    def configure_optimizers(self):
         """
-        Performs the forward step for yolov1.
-        Inputs:
-            >> images: (torch.tensor [Batch, CHS, IMG_H, IMG_W])
+        Configures the optimizer that will be used during the training process
+        Inputs: None
         Outputs:
-            >> predictions: (torch.tensor [Batch, S*S*(num_classes + num_boxes * DATA_PER_BOX)])
+            >> optimizers_list: (list) Contains the optimizers for the generator, discriminator and classifier.
+            >> lr_schedulers_list: (list) Contains the lr schedulers for the generator, discriminator and classifier.
         """
-        return self.model(images)
+        yolov1_optim = torch.optim.Adam(
+            self.model.parameters(),
+            lr=self.conf["hyperparams"]["lr"],
+            weight_decay=self.conf["hyperparams"]["wights_decay"],
+            betas=(
+                self.conf["hyperams"]["optim"]["beta1"],
+                self.conf["hyperams"]["optim"]["beta2"]
+            )
+        )
 
-def load_backbone(backbone_name: str, in_chs: int):
-    """
-    Loads the especified backbone.
-    Inputs:
-        >> backbone_name: (str) Name of the backbone (resnet50, resnet34, resnet18 or darknet19)
-        >> in_chs: (int) Quantity of input chs.
-    Outputs:
-        >> backbone: (nn.Module) Backbone network
-        >> backbone_out_feat: (int) Number of output chs by the backbone
-    """
-    backbone = nn.Module()
-    backbone_out_feat = -1
+        # TODO: Check the yolov1 lr scheduler to be used
+        #yolov1_lr_scheduler = None
+        #return yolov1_optim, yolov1_lr_scheduler
 
-    if backbone_name == 'darknet19':
-        backbone = backbones.Darknet19Backbone(in_chs)
-        backbone_out_feat = 1024
-
-    elif backbone_name == 'resnet50':
-        backbone = backbones.Resnet50Backbone(in_chs)
-        backbone_out_feat = 2048
-
-    elif backbone_name == 'resnet34':
-        backbone = backbones.Resnet34Backbone(in_chs)
-        backbone_out_feat = 512
-
-    elif backbone_name == 'resnet18':
-        backbone = backbones.Resnet34Backbone(in_chs)
-        backbone_out_feat = 512
-
-    else:
-        raise ValueError(f'{backbone_name} is not a valid option. You can choose between {AVAILABLE_BACKBONES}.')
-
-    return backbone, backbone_out_feat
+        return yolov1_optim

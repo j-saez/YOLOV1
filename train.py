@@ -46,7 +46,8 @@ if __name__== "__main__":
         num_workers=config.general.workers,
         pin_memory=True,
         shuffle=True,
-        drop_last=True)
+        drop_last=True
+    )
 
     # Load the model
     model = YOLOV1(
@@ -54,19 +55,16 @@ if __name__== "__main__":
         num_classes=train_dataset.C,
         split_size=config.dataparams.img_split_size,
         backbone_to_use=config.hyperparams.backbone,
-        num_boxes=config.dataparams.box_per_split).to(device)
+        num_boxes=config.dataparams.box_per_split#
+    )
+    model.to(device)
 
     # Create the tensorboard writer
     writer, weigths_folder = load_tensorboard_writer(config)
     total_train_baches = int(len(train_dataloader))
 
     # Load the criterion and optimizer
-    criterion = YOLOV1Loss(
-        split_size=config.dataparams.img_split_size,
-        num_classes=train_dataset.C,
-        num_boxes=config.dataparams.box_per_split,
-        lambda_coord=config.hyperparams.loss_lambda_coord,
-        lambda_noobj=config.hyperparams.loss_lambda_nocoord)
+    criterion = YOLOV1Loss(conf)
 
     optimizer = optim.Adam(
         model.parameters(),
