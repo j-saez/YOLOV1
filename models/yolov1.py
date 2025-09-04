@@ -17,10 +17,7 @@ class YOLOV1(torch_lightning.LightningModule):
         num_classes = self.conf["dataset"]["num_classes"]
         data_per_box = 5 # The 5 values are: (prob,x,y,w,h)
 
-        backbone, backbone_out_feat = backbones.load(
-            self.conf["model"]["backbone"],
-            self.conf["dataset"]["data_chs"],
-        )
+        backbone, backbone_out_feat = backbones.load(conf)
 
 
         fcl = nn.Sequential(

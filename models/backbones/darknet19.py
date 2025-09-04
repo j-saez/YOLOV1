@@ -56,9 +56,9 @@ class Darknet19Backbone(nn.Module):
             conv_layer5,
             conv_layer6,)
 
-    def forward(self, images: torch.tensor):
+    def forward(self, images: torch.Tensor) -> torch.Tensor:
         """
-        TODO
+        Performs the forward step for the ConvBlockKer1x1Ker3x3.
         Inputs:
             >> images: (torch.tensor [Batch, CHS, IMG_H, IMG_W])
         Outputs:
@@ -68,7 +68,7 @@ class Darknet19Backbone(nn.Module):
 
 class ConvBlockKer1x1Ker3x3(nn.Module):
 
-    def __init__(self, in_chs: int, l1_out_chs: int, l2_out_chs: int, total_blocks: int):
+    def __init__(self, in_chs: int, l1_out_chs: int, l2_out_chs: int, total_blocks: int) -> None:
         """
         TODO
         Inputs:
@@ -90,9 +90,9 @@ class ConvBlockKer1x1Ker3x3(nn.Module):
                     ConvLayer(l1_out_chs, l2_out_chs, kernel_size=1, stride=1, padding=0),))
             in_chs = l2_out_chs
 
-    def forward(self, inputs: torch.tensor):
+    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
         """
-        Performs the forward step for the convolutional layer
+        Performs the forward step for the Darknet19Backbone.
         Inputs:
             >> inputs: (torch.tensor [batch, in_chs, h, w])
         Outputs:
@@ -102,7 +102,7 @@ class ConvBlockKer1x1Ker3x3(nn.Module):
 
 class ConvLayer(nn.Module):
 
-    def __init__(self, in_chs: int, out_chs: int, kernel_size: int, stride: int, padding: int):
+    def __init__(self, in_chs: int, out_chs: int, kernel_size: int, stride: int, padding: int) -> None:
         """
         A convolutional layer followed by BatchNorm2d and LeakyReLU.
         Inputs:
@@ -121,9 +121,9 @@ class ConvLayer(nn.Module):
             nn.BatchNorm2d(out_chs),
             nn.LeakyReLU(0.2))
 
-    def forward(self, inputs: torch.tensor):
+    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
         """
-        Performs the forward step for the convolutional layer
+        Performs the forward step for the ConvLayer.
         Inputs:
             >> inputs: (torch.tensor [batch, in_chs, h, w])
         Outputs:

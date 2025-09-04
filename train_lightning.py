@@ -2,13 +2,10 @@ import os
 import argparse
 import pytorch_lightning as pl
 from models import YOLOV1
-import datasets
+import datasets.classes as datasets
 import json
 from pytorch_lightning.loggers import TensorBoardLogger
 from pytorch_lightning.callbacks import ModelCheckpoint
-
-SOURCE_IMGS_IDX = 0
-TARGET_IMGS_IDX = 1
 
 def load_config(file_path: str) -> dict:
     """
@@ -38,10 +35,6 @@ def load_config(file_path: str) -> dict:
 
 if __name__ == '__main__':
 
-    #################
-    # CONFIGURATION #
-    #################
-
     parser = argparse.ArgumentParser(description='Arguments for YOLOv1 training.')
     parser.add_argument(
         '--config-file',
@@ -52,33 +45,23 @@ if __name__ == '__main__':
     args = parser.parse_args()
     config = load_config(args.config_file)
 
-    ##################
-    # MODEL and DATA #
-    ##################
-
-    # Configuration gets updated as it add some information about the dataset loaded
-    # that it necessary for the model, such as the number of chs in the images.
-    data_module, updated_config = datasets.YOLOV1DataModule(config)
+    data_module = datasets.YOLOV1DataModule(config)
 
     model = pl.LightningModule()
     if config["training"]["from_pretrained"] == True:
         model = YOLOV1.load_from_checkpoint(config["training"]["weights_path"])
-        print(f'pretrained weights: {config["training"]["weights_path"]}')
+        print(f'Loading the model from the following pretrained weights: {config["training"]["weights_path"]}')
     else:
-        model = YOLOV1(updated_config)
-
-
-    #############
-    # CALLBACKS #
-    #############
+        model = YOLOV1(config)
+        print(f'Training the model from scratch.')
 
     checkpoint_filename = f'YOLOV1_{config["dataset"]["name"]}_{os.path.basename(args.config_file)}Config'
     checkpoint_callback = ModelCheckpoint(
         dirpath=f'{os.getcwd()}/runs/checkpoints',
         filename=checkpoint_filename+'_e{epoch}_mClsAcc{val_acc:.2f}',
-        save_top_k = 1,
-        monitor='val_acc',
-        mode='max',
+        save_top_k = 3,
+        monitor='val_yolov1_loss',
+        mode='min',
         verbose=True,
         save_on_train_epoch_end=False # Save after validation
     )
@@ -89,10 +72,6 @@ if __name__ == '__main__':
         version=f'{config["dataset"]["name"]}_{os.path.basename(args.config_file)}Config',
         default_hp_metric=False
     )
-
-    #########
-    # Train #
-    #########
 
     trainer = pl.Trainer(
         callbacks = [checkpoint_callback],

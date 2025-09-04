@@ -5,7 +5,7 @@
 import torch
 import torch.nn as nn
 from training.metrics import calculate_iou
-from typing import Dict
+from typing import Dict, Tuple
 
 #############
 ## globals ##
@@ -41,7 +41,7 @@ class YOLOV1Loss(nn.Module):
         self.lambda_coord = conf["hyperparams"]["lambda_coord"]
         return
 
-    def forward(self, predictions: torch.Tensor, labels: torch.Tensor):
+    def forward(self, predictions: torch.Tensor, labels: torch.Tensor) -> Tuple[torch.Tensor]:
         """
         Inputs:
             >> predictions: (torch.Tensor [B, S * S * classes * (5 * model_out_boxes)]) yolov1 output

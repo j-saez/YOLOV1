@@ -1,8 +1,8 @@
 import torch.nn as nn
-from typing import Dict
+from typing import Dict, Tuple
 from models import backbones
 
-def load(conf: Dict):
+def load(conf: Dict) -> Tuple[nn.Module, int]:
     """
     Loads the especified backbone.
     Inputs:
@@ -32,7 +32,7 @@ def load(conf: Dict):
         backbone_out_feat = 512
 
     elif backbone_name == 'resnet18':
-        backbone = backbones.Resnet34Backbone(in_chs)
+        backbone = backbones.Resnet18Backbone(in_chs)
         backbone_out_feat = 512
 
     else:

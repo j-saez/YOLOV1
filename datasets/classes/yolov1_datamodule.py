@@ -33,12 +33,12 @@ class YOLOV1DataModule(pl.LightningDataModule):
         TRAIN = 0
         VAL = 1
         TEST = 2
-        if stage == 'fit' or stage == None:
-            self.train_dataset = load_dataset(self.config, TRAIN)
-            self.val_dataset = load_dataset(self.config, VAL)
-
+        if stage == 'fit':
+            self.train_dataset, self.conf = load_dataset(self.config, TRAIN)
+        elif stage == 'validate':
+            self.val_dataset, self.conf = load_dataset(self.config, VAL)
         elif stage == 'test':
-            self.test_dataset = load_dataset(self.config, TEST)
+            self.test_dataset, self.conf = load_dataset(self.config, TEST)
 
         return
 
@@ -47,6 +47,7 @@ class YOLOV1DataModule(pl.LightningDataModule):
             self.train_dataset,
             batch_size=self.config["training"]["hyperparams"]["batch_size"],
             num_workers=self.config["training"]["num_workers"],
+            pin_memory=True, # This lets .to(device, non_blocking=True) use page-locked memory → faster async transfers.
             shuffle=False
         )
 

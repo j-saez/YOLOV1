@@ -16,16 +16,20 @@ class Resnet34Backbone(nn.Module):
         super(Resnet34Backbone, self).__init__()
         self.device_param = nn.Parameter(torch.empty(0))
 
+
+        if (in_chs != 3):
+            raise ValueError('You can only use the Resnet34Backbone with datasets that are coloured (i.e. their images have 3 channels).')
+
         resnet34 = torchvision.models.resnet34(weights=torchvision.models.ResNet34_Weights.IMAGENET1K_V1)
 
         self.backbone = nn.Sequential()
         self.backbone.add_module('restnet', nn.Sequential(*list(resnet34.children()))[:-2])
-        self.backbone.add_module('last_layer', nn.MaxPool2d(kernel_size=2, stride=2)) 
+        self.backbone.add_module('last_layer', nn.MaxPool2d(kernel_size=2, stride=2))
         return
 
-    def forward(self, images: torch.tensor):
+    def forward(self, images: torch.Tensor) -> torch.Tensor:
         """
-        TODO
+        Runs the forward step for the Restne18Backbone network.
         Inputs:
             >> images: (torch.tensor [Batch, CHS, IMG_H, IMG_W])
         Outputs:

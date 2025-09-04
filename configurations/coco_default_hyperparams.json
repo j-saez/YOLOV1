@@ -2,14 +2,20 @@
   "model": {
     "input_w": 784,
     "input_h": 784,
+    "backbone": "darknet19",
+
+    "_comment": "YOLOV1 params. Add the proper values."
+    "split_size": -1,
+    "num_boxes": -1,
   },
   "training": {
     "from_pretrained": false,
-    "weights_path": "./weights",
+    "weights_path": "../runs/checkpoints/weights.pt",
 
     "hyperparams": {
         "batch_size": 64,
         "epochs": 20,
+        "loggin_steps": 100,
         "learning_rate": 0.001
         "adam_beta1": 0.001
         "adam_beta2": 0.001
@@ -17,7 +23,11 @@
   },
   "dataset": {
     "name": "coco",
-    "data_dir": "./data"
+    "path": "./datasets/data/coco2017"
+    "num_workers": 2,
+    "num_classes": 80,
+    "data_chs": 3,
+    "prepare_per_node": true,
   },
   "callbacks": {
     "early_stopping": {
