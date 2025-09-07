@@ -2,6 +2,7 @@ import pytorch_lightning as pl
 from torch.utils.data import DataLoader
 from datasets.classes import load_dataset, download_dataset
 from typing import Dict
+from datasets.classes.utils import DatasetSplitEnum
 
 class YOLOV1DataModule(pl.LightningDataModule):
 
@@ -30,23 +31,19 @@ class YOLOV1DataModule(pl.LightningDataModule):
         """
         # this is for multiple gpu as it is called in every gpu on the system.
 
-        TRAIN = 0
-        VAL = 1
-        TEST = 2
         if stage == 'fit':
-            self.train_dataset, self.conf = load_dataset(self.config, TRAIN)
-        elif stage == 'validate':
-            self.val_dataset, self.conf = load_dataset(self.config, VAL)
+            self.train_dataset = load_dataset(self.config, DatasetSplitEnum.TRAIN.value)
+            self.val_dataset = load_dataset(self.config, DatasetSplitEnum.VAL.value)
         elif stage == 'test':
-            self.test_dataset, self.conf = load_dataset(self.config, TEST)
+            self.test_dataset = load_dataset(self.config, DatasetSplitEnum.TEST.value)
 
         return
 
     def train_dataloader(self,):
         return DataLoader(
             self.train_dataset,
-            batch_size=self.config["training"]["hyperparams"]["batch_size"],
-            num_workers=self.config["training"]["num_workers"],
+            batch_size=self.config["training"]["batch_size"],
+            num_workers=self.config["dataset"]["num_workers"],
             pin_memory=True, # This lets .to(device, non_blocking=True) use page-locked memory → faster async transfers.
             shuffle=False
         )
@@ -54,15 +51,15 @@ class YOLOV1DataModule(pl.LightningDataModule):
     def val_dataloader(self,):
         return DataLoader(
             self.val_dataset,
-            batch_size=self.config["training"]["hyperparams"]["batch_size"],
-            num_workers=self.config["training"]["num_workers"],
+            batch_size=self.config["training"]["batch_size"],
+            num_workers=self.config["dataset"]["num_workers"],
             shuffle=False
         )
 
     def test_dataloader(self,):
         return DataLoader(
             self.test_dataset,
-            batch_size=self.config["training"]["hyperparams"]["batch_size"],
-            num_workers=self.config["training"]["num_workers"],
+            batch_size=self.config["training"]["batch_size"],
+            num_workers=self.config["dataset"]["num_workers"],
             shuffle=False
         )

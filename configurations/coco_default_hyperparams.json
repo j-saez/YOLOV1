@@ -1,33 +1,73 @@
 {
+  "accelerator": "gpu",
+  "gpus_ids": [0],
   "model": {
-    "input_w": 784,
-    "input_h": 784,
+    "input_w": 448,
+    "input_h": 448,
     "backbone": "darknet19",
 
-    "_comment": "YOLOV1 params. Add the proper values."
-    "split_size": -1,
-    "num_boxes": -1,
+    "comment1": "YOLOv1 params",
+    "split_size": 7,
+    "num_boxes": 2
   },
   "training": {
     "from_pretrained": false,
     "weights_path": "../runs/checkpoints/weights.pt",
+    "logging_steps": 100,
+    "epochs": 135,
+    "batch_size": 64,
 
     "hyperparams": {
-        "batch_size": 64,
-        "epochs": 20,
-        "loggin_steps": 100,
-        "learning_rate": 0.001
-        "adam_beta1": 0.001
-        "adam_beta2": 0.001
-    },
+      "lambda_coord": 5.0,
+      "lambda_noobj": 0.5,
+      "optim": {
+
+        "comment2": "Choose adam or adamw and choose their hyperparams.",
+
+        "name": "adamw",
+        "weight_decay": 0.0005,
+        "learning_rate": 0.001,
+        "adam_beta1": 0.9,
+        "adam_beta2": 0.999
+      },
+      "lr_scheduler": {
+
+        "comment3": {
+            "comment4": "Choose cosineannealinglr or steplr. The hyperparams vary depeding on the scheduler.",
+
+            "comment5": "This is an example for the cosienannealinglr",
+            "name": "cosineannealinglr",
+            "params": {
+                "eta_min": 1e-5,
+                "last_epoch": -1
+            },
+
+            "comment6": "This is an example for the steplr",
+            "name": "steplr",
+            "params": {
+                "step_size": 30,
+                "gamma": 0.1,
+                "last_epoch": -1
+            }
+        },
+
+        "comment7": "This is the one that is going to be loaded.",
+
+        "name": "cosineannealinglr",
+        "params": {
+            "eta_min": 1e-5,
+            "last_epoch": -1
+        }
+      }
+    }
   },
   "dataset": {
-    "name": "coco",
-    "path": "./datasets/data/coco2017"
+    "name": "voc",
+    "path": "./datasets/data/voc",
     "num_workers": 2,
     "num_classes": 80,
     "data_chs": 3,
-    "prepare_per_node": true,
+    "prepare_per_node": true
   },
   "callbacks": {
     "early_stopping": {
@@ -41,4 +81,3 @@
     }
   }
 }
-

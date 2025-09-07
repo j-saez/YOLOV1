@@ -1,99 +1,89 @@
+import os
+import kagglehub
+import shutil
 from pathlib import Path
 from typing import Dict
-from datasets import COCODataset
+from datasets.classes.coco import COCODataset
+from datasets.classes.voc import VOCDataset
 from torch.utils.data import Dataset
-import fiftyone.zoo as foz
+from enum import Enum
 
-AVAILABLE_DATASETS = ["coco"]
+class DatasetSplitEnum(Enum):
+    TRAIN = 0
+    VAL = 1
+    TEST = 2
+
+AVAILABLE_DATASETS = ["coco", "voc"]
 
 def load_dataset(config: Dict, split: int) -> Dataset:
     """
     Load a dataset based on the experiment configuration.
 
-    This function initializes a dataset object (currently only COCO is supported),
-    attaches relevant dataset metadata to the configuration, and returns both
-    the dataset and the updated config.
-
     Args:
-        config (Dict): Experiment configuration dictionary. Must contain:
-            - config["dataset"]["name"]: str
-                Name of the dataset to load (e.g., "coco").
-            - config["dataset"]["path"]: str
-                Path to the dataset files.
-            - config["dataset"]["img_chs"]:
-                Number of channels in the dataset images.
-            - config["dataset"]["num_classes"]: int
-                Number of classes present in the dataset.
-        split (int): The dataset split to load (e.g., train, val, test).
-            Convention is: 0 = train, 1 = val, 2 = test).
+        config (Dict): Experiment configuration dictionary.
+        split (int): The dataset split to load (0 = train, 1 = val, 2 = test).
 
     Returns:
-        Tuple[Dataset, Dict]:
-            - A PyTorch Dataset object for the requested split.
-    Raises:
-        ValueError: If the dataset name is not supported.
-
-    Notes:
-        - Currently only supports the COCO dataset via `datasets.coco.COCODataset`.
-        - Additional datasets must be added to `AVAILABLE_DATASETS` and handled here.
-    """
-
-    dataset_name = config["dataset"]["name"]
-    if (dataset_name not in AVAILABLE_DATASETS):
-        raise ValueError(f"{dataset_name} is not valid. Choose from: {AVAILABLE_DATASETS}")
-
-    dataset = Dataset()
-    if dataset_name == 'coco':
-        dataset = COCODataset(config, split)
-
-    return dataset
-
-def download_dataset(config: Dict) -> None:
-    """
-    Download a dataset from FiftyOne Dataset Zoo (for COCO 2017) or via
-    direct URL/manual methods for others.
-
-    Args:
-        config (Dict): Experiment configuration dictionary. Must contain:
-            - config["dataset"]["name"]: str
-                Name of the dataset ("coco" uses FiftyOne, others use manual download).
-            - config["dataset"]["split"]: str, optional
-                Split for datasets that support it (e.g., "train", "validation", "test").
-            - config["dataset"]["path"]: str
-                Local directory/file path where the dataset should be saved/exported.
-
-    Returns:
-        None
-
-    Side Effects:
-        - Downloads and saves dataset to the specified path if it does not exist.
+        Dataset: A PyTorch Dataset object for the requested split.
     """
     dataset_name = config["dataset"]["name"].lower()
-    split = config["dataset"].get("split", None)
-    output_path = Path(config["dataset"]["path"])
-
     if dataset_name not in AVAILABLE_DATASETS:
         raise ValueError(f"{dataset_name} is not valid. Choose from: {AVAILABLE_DATASETS}")
 
-    # Skip if dataset already exists
-    if output_path.exists():
-        print(f"[INFO] Dataset already exists at {output_path}. Skipping download.")
-        return
-
     if dataset_name == "coco":
-        # Use FiftyOne for COCO 2017
-        print(f"[INFO] Downloading COCO 2017 ({split}) via FiftyOne Dataset Zoo...")
-        dataset = foz.load_zoo_dataset(
-            "coco-2017",
-            split=split,
-            dataset_name=f"coco-2017-{split}" if split else "coco-2017",
-        )
+        return COCODataset(config, split)
+    elif dataset_name == "voc":
+        return VOCDataset(config, split)
 
-        print(f"[INFO] Exporting COCO 2017 ({split}) to {output_path}...")
-        dataset.export(
-            export_dir=str(output_path),
-            dataset_type=foz.types.COCODetectionDataset,
-            split=split,
-        )
+    raise ValueError(f"Dataset {dataset_name} not supported")
 
+def download_dataset(config: Dict) -> None:
+    """
+    Download a dataset:
+    - VOC via kagglehub (all valid splits for the year, extracted locally).
+    - COCO via FiftyOne (train, val, test).
+
+    Args:
+        config (Dict): Experiment configuration dictionary.
+
+    Returns:
+        None
+    """
+    dataset_name = config["dataset"]["name"].lower()
+    output_path = Path(config["dataset"]["path"])
+
+    if dataset_name not in ["voc", "coco"]:
+        raise ValueError(f"{dataset_name} is not valid. Choose from: ['voc', 'coco']")
+
+    if output_path.exists():
+        f"[INFO] {dataset_name} is already present. Download aborted."
         return
+
+    if not output_path.parent.exists():
+        response = input(
+            f"[WARNING] Parent directory {output_path.parent} does not exist. Create it? [y/N]: "
+        ).strip().lower()
+        if response == "y":
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            print(f"[INFO] Created {output_path.parent}")
+        else:
+            print("[ERROR] Dataset path does not exist. Aborting.")
+            return
+
+    output_path.mkdir(parents=True, exist_ok=True)
+
+    if dataset_name == "voc":
+        print("[INFO] Downloading the VOC Dataset...")
+        temp_path = Path(kagglehub.dataset_download("bardiaardakanian/voc0712"))
+        print("[INFO] VOC Dataset downloaded to:", temp_path)
+        for item in temp_path.iterdir():
+            shutil.move(str(item), output_path)
+        print("[INFO] VOC Dataset moved to:", output_path)
+
+    elif dataset_name == "coco":
+        print("[INFO] Downloading the COCO 2017 Dataset...")
+        temp_path = Path(kagglehub.dataset_download("awsaf49/coco-2017-dataset"))
+        print("[INFO] COCO 2017 Dataset downloaded to:", temp_path)
+        for item in temp_path.iterdir():
+            shutil.move(str(item), output_path)
+        print("[INFO] COCO 2017 Dataset moved to:", output_path)

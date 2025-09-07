@@ -4,7 +4,6 @@
 
 import torch
 import torch.nn as nn
-from training.metrics import calculate_iou
 from typing import Dict, Tuple
 
 #############
@@ -20,6 +19,49 @@ H_IDX = 24
 #############
 ## classes ##
 #############
+
+def calculate_iou(boxes_preds: torch.Tensor, boxes_labels: torch.Tensor, box_format="midpoint") -> torch.Tensor:
+    """
+    Calculates intersection over union (IoU)
+    Args:
+        boxes_preds (tensor): Predictions of Bounding Boxes (..., 4)
+        boxes_labels (tensor): Correct labels of Bounding Boxes (..., 4)
+        box_format (str): midpoint/corners, if boxes (x,y,w,h) or (x1,y1,x2,y2)
+    Returns:
+        tensor: IoU for each pair
+    """
+    box1_x1, box2_x1 = 0,0
+    box1_y1, box2_y1 = 0,0
+    box1_x2, box2_x2 = 0,0
+    box1_y2, box2_y2 = 0,0
+
+    if box_format == "midpoint":
+        # (x_center, y_center, w, h) -> (x1, y1, x2, y2)
+        box1_x1 = boxes_preds[..., 0:1] - boxes_preds[..., 2:3] / 2
+        box1_y1 = boxes_preds[..., 1:2] - boxes_preds[..., 3:4] / 2
+        box1_x2 = boxes_preds[..., 0:1] + boxes_preds[..., 2:3] / 2
+        box1_y2 = boxes_preds[..., 1:2] + boxes_preds[..., 3:4] / 2
+
+        box2_x1 = boxes_labels[..., 0:1] - boxes_labels[..., 2:3] / 2
+        box2_y1 = boxes_labels[..., 1:2] - boxes_labels[..., 3:4] / 2
+        box2_x2 = boxes_labels[..., 0:1] + boxes_labels[..., 2:3] / 2
+        box2_y2 = boxes_labels[..., 1:2] + boxes_labels[..., 3:4] / 2
+    elif box_format == "corners":
+        box1_x1, box1_y1, box1_x2, box1_y2 = boxes_preds[..., 0:1], boxes_preds[..., 1:2], boxes_preds[..., 2:3], boxes_preds[..., 3:4]
+        box2_x1, box2_y1, box2_x2, box2_y2 = boxes_labels[..., 0:1], boxes_labels[..., 1:2], boxes_labels[..., 2:3], boxes_labels[..., 3:4]
+
+    x1 = torch.max(box1_x1, box2_x1)
+    y1 = torch.max(box1_y1, box2_y1)
+    x2 = torch.min(box1_x2, box2_x2)
+    y2 = torch.min(box1_y2, box2_y2)
+
+    # clamp to avoid negatives
+    intersection = (x2 - x1).clamp(0) * (y2 - y1).clamp(0)
+
+    box1_area = abs((box1_x2 - box1_x1) * (box1_y2 - box1_y1))
+    box2_area = abs((box2_x2 - box2_x1) * (box2_y2 - box2_y1))
+
+    return intersection / (box1_area + box2_area - intersection + 1e-6)
 
 class YOLOV1Loss(nn.Module):
     def __init__(self, conf: Dict):
@@ -37,8 +79,8 @@ class YOLOV1Loss(nn.Module):
         self.S = conf["model"]["split_size"]
         self.C = conf["dataset"]["num_classes"]
         self.B = conf["model"]["num_boxes"]
-        self.lambda_noobj = conf["hyperparams"]["lambda_noobj"]
-        self.lambda_coord = conf["hyperparams"]["lambda_coord"]
+        self.lambda_noobj = conf["training"]["hyperparams"]["lambda_noobj"]
+        self.lambda_coord = conf["training"]["hyperparams"]["lambda_coord"]
         return
 
     def forward(self, predictions: torch.Tensor, labels: torch.Tensor) -> Tuple[torch.Tensor]:

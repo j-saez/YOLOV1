@@ -43,17 +43,28 @@ if __name__ == '__main__':
         help='Full path to the configuration file.'
     )
     args = parser.parse_args()
+
+    print(f'[INFO] Loading config...')
     config = load_config(args.config_file)
+    print(f'[INFO] Done.')
 
+    print(f'[INFO] Loading DataModule...')
     data_module = datasets.YOLOV1DataModule(config)
+    print(f'[INFO] Done.')
 
+    print(f'[INFO] Loading YOLOV1 model...')
     model = pl.LightningModule()
     if config["training"]["from_pretrained"] == True:
+        print(f'[INFO]      Loading the model from the following pretrained weights: {config["training"]["weights_path"]}')
         model = YOLOV1.load_from_checkpoint(config["training"]["weights_path"])
-        print(f'Loading the model from the following pretrained weights: {config["training"]["weights_path"]}')
     else:
+        print(f'[INFO]      Training the model from scratch.')
         model = YOLOV1(config)
-        print(f'Training the model from scratch.')
+    print(f'[INFO] Done.')
+
+    print(f'[INFO] Running healtchecks...')
+    print(f'[INFO] HEALTHCHECK HAVE NOT BEEN IMPLEMENTED YET')
+    print(f'*************************************************')
 
     checkpoint_filename = f'YOLOV1_{config["dataset"]["name"]}_{os.path.basename(args.config_file)}Config'
     checkpoint_callback = ModelCheckpoint(
@@ -79,8 +90,9 @@ if __name__ == '__main__':
         accelerator=config["accelerator"],
         devices=config["gpus_ids"],
         max_epochs=config["training"]["epochs"],
-        log_every_n_steps=config["training"]["loggin_steps"]
+        log_every_n_steps=config["training"]["logging_steps"]
     )
 
+    print(f'[INFO] Starting of the training process...')
     trainer.fit(model, data_module)
     trainer.test(model, data_module)
