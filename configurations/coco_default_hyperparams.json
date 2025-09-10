@@ -63,7 +63,7 @@
   },
   "dataset": {
     "name": "voc",
-    "path": "./datasets/data/voc",
+    "path": "./datasets/data",
     "num_workers": 2,
     "num_classes": 80,
     "data_chs": 3,
