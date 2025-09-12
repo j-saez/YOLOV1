@@ -1,0 +1,86 @@
+{
+  "accelerator": "gpu",
+  "gpus_ids": [0],
+  "model": {
+    "input_w": 448,
+    "input_h": 448,
+    "backbone": "darknet19",
+
+    "comment1": "YOLOv1 params",
+    "split_size": 7,
+    "num_boxes": 2
+  },
+  "training": {
+    "precision": 32,
+    "from_pretrained": false,
+    "weights_path": "../runs/checkpoints/weights.pt",
+    "logging_steps": 20,
+    "validation_epochs": 5,
+    "epochs": 135,
+    "batch_size": 8,
+
+    "hyperparams": {
+      "lambda_coord": 5.0,
+      "lambda_noobj": 0.5,
+      "optim": {
+
+        "comment2": "Choose adam or adamw and choose their hyperparams.",
+
+        "name": "ada",
+        "weight_decay": 0.0005,
+        "learning_rate": 0.0001,
+        "adam_beta1": 0.9,
+        "adam_beta2": 0.999
+      },
+      "lr_scheduler": {
+
+        "comment3": {
+            "comment4": "Choose cosineannealinglr or steplr. The hyperparams vary depeding on the scheduler.",
+
+            "comment5": "This is an example for the cosienannealinglr",
+            "name": "cosineannealinglr",
+            "params": {
+                "eta_min": 1e-5,
+                "last_epoch": -1
+            },
+
+            "comment6": "This is an example for the steplr",
+            "name": "steplr",
+            "params": {
+                "step_size": 30,
+                "gamma": 0.1,
+                "last_epoch": -1
+            }
+        },
+
+        "comment7": "This is the one that is going to be loaded.",
+
+        "name": "cosineannealinglr",
+        "params": {
+            "eta_min": 1e-5,
+            "last_epoch": -1
+        }
+      }
+    }
+  },
+  "dataset": {
+    "name": "voc",
+    "path": "./datasets/data",
+    "num_workers": 2,
+    "num_classes": 20,
+    "data_chs": 3,
+    "prepare_per_node": true
+  },
+  "callbacks": {
+    "early_stopping": {
+      "monitor": "val_loss",
+      "patience": 3
+    },
+    "checkpoint": {
+      "monitor": "val_loss",
+      "save_top_k": 1,
+      "mode": "min"
+    }
+  }
+}
+

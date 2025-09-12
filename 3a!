@@ -1,6 +1,5 @@
 import os
 import argparse
-from shutil import Error
 import pytorch_lightning as pl
 from models import YOLOV1
 from configurations.utils import load_config, runConfigHealthChecks
@@ -23,11 +22,7 @@ if __name__ == '__main__':
 
     print(f'[INFO] Loading config...')
     config = load_config(args.config_file)
-    if not runConfigHealthChecks(config):
-        raise Error(f'runConfigHealthChecks failed. Check the messages regarding the configuration.')
-
-    print(f'[INFO] \tConfig healtchecks passed...')
-    print(f'[INFO] \tConfig healtchecks passed...')
+    runConfigHealthChecks(config)
     print(f'[INFO] Done.')
 
     print(f'[INFO] Loading DataModule...')
@@ -43,6 +38,10 @@ if __name__ == '__main__':
         print(f'[INFO]      Training the model from scratch.')
         model = YOLOV1(config)
     print(f'[INFO] Done.')
+
+    print(f'[INFO] Running healtchecks...')
+    print(f'[INFO] HEALTHCHECK HAVE NOT BEEN IMPLEMENTED YET')
+    print(f'*************************************************')
 
     checkpoint_filename = f'YOLOV1_{config["dataset"]["name"]}_{os.path.basename(args.config_file)}Config'
     checkpoint_callback = ModelCheckpoint(

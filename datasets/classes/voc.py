@@ -103,14 +103,15 @@ class VOCDataset(Dataset):
         image_path = self.path + '/JPEGImages/' + image_id + '.jpg'
 
         label_path = self.path + '/Annotations/' + image_id + '.xml'
-        norm_labels = self.__get_normalised_label__(label_path)
+        labels = self.__get_xywh_normalised_label__(label_path)
+        labels = self.__convert_to_yolov1_label__(labels)
 
         image = Image.open(image_path).convert("RGB")
 
-        return self.transform(image), norm_labels
+        return self.transform(image), labels
 
 
-    def __get_normalised_label__(self, xml_file: str) -> torch.Tensor:
+    def __get_xywh_normalised_label__(self, xml_file: str) -> torch.Tensor:
         """
         Parses a VOC XML file and returns normalized bounding boxes.
 
@@ -151,3 +152,50 @@ class VOCDataset(Dataset):
 
         return labels
 
+    def __convert_to_yolov1_label__( self, boxes_tensor: torch.Tensor) -> torch.Tensor:
+        """
+        Converts per-box normalized labels to YOLO v1 cell format.
+
+        Args:
+            boxes_tensor: [num_boxes, num_clases+5] tensor (one-hot classes + conf + x,y,w,h normalized to 0..1)
+
+        Returns:
+            yolov1_label: [S, S, num_boxes per cell *5 + num_clases] tensor
+        """
+        S = self.config["model"]["split_size"]
+        B = self.config["model"]["num_boxes"]
+        C = self.total_classes
+
+        device = boxes_tensor.device
+        yolov1_label = torch.zeros((S, S, B*5 + C), device=device)
+
+        for box in boxes_tensor:
+            class_one_hot = box[:C]
+            conf, x, y, w, h = box[C:]
+
+            # 1️⃣ Determine which cell the object belongs to
+            cell_i = int(y * S)
+            cell_j = int(x * S)
+            # clamp in case x=1 or y=1
+            cell_i = min(cell_i, S-1)
+            cell_j = min(cell_j, S-1)
+
+            # 2️⃣ Choose which of the B boxes to assign
+            # YOLO v1 assigns the **first box** if empty; if multiple objects per cell, more complex logic can be added
+            if yolov1_label[cell_i, cell_j, 4] == 0:  # check conf of first box
+                box_offset = 0
+            elif B > 1 and yolov1_label[cell_i, cell_j, 9] == 0:  # second box
+                box_offset = 5
+            else:
+                # Already full, skip or override (depends on your strategy)
+                continue
+
+            # 3️⃣ Fill in box info relative to cell
+            x_cell = x * S - cell_j  # relative x within cell (0..1)
+            y_cell = y * S - cell_i  # relative y within cell (0..1)
+
+            yolov1_label[cell_i, cell_j, box_offset:box_offset+5] = torch.tensor([x_cell, y_cell, w, h, 1.0], device=device)
+            # 4️⃣ Fill class probabilities (YOLO v1 uses same class vector for both boxes in cell)
+            yolov1_label[cell_i, cell_j, B*5:] = class_one_hot
+
+        return yolov1_label

@@ -1,3 +1,4 @@
+from torch import optim
 import torch
 import torch.nn as nn
 import pytorch_lightning as torch_lightning
@@ -7,6 +8,11 @@ from models import backbones
 from training.loss import YOLOV1Loss
 from torch.optim.lr_scheduler import CosineAnnealingLR, StepLR
 from torchmetrics.detection.mean_ap import MeanAveragePrecision
+from enum import Enum
+
+class BatchInfoEnum(Enum):
+    IMAGES = 0
+    LABELS = 1
 
 class YOLOV1(torch_lightning.LightningModule):
 
@@ -37,86 +43,96 @@ class YOLOV1(torch_lightning.LightningModule):
 
         return
 
-    def training_step(self, images: torch.Tensor, labels: torch.Tensor, batch_idx: int):
+    def training_step(self, batch: torch.Tensor, batch_idx: int):
         device = next(self.model.parameters()).device  # guaranteed to be a torch.device
-        with torch.autocast(device_type=device.type, dtype=torch.float16, enabled=True):
-            preds = self.model(images)
-            loss_list = self.loss_function(preds,labels)
-            [
-                yolov1_loss,
-                box_loss,
-                object_loss,
-                noobject_loss,
-                prob_loss
-            ] = loss_list
+        images = batch[BatchInfoEnum.IMAGES.value]
+        labels = batch[BatchInfoEnum.LABELS.value]
 
-            # on_step = True --> Logs the metric at the current step
-            # on_epoch = True --> Automatically accumlates and logs at the end of the epoch
-            self.log_dict({
-                f"train_yolov1_loss": yolov1_loss,
-                f"train_box_loss": box_loss,
-                f"train_object_loss": object_loss,
-                f"train_no_object_loss": noobject_loss,
-                f"train_prob_loss": prob_loss,
-            }, on_step=False, on_epoch=True)
+        preds = self.model(images)
+        loss_list = self.loss_function(preds,labels)
+        [
+            yolov1_loss,
+            box_loss,
+            object_loss,
+            noobject_loss,
+            prob_loss
+        ] = loss_list
+
+        # on_step = True --> Logs the metric at the current step
+        # on_epoch = True --> Automatically accumlates and logs at the end of the epoch
+        self.log_dict({
+            f"train_yolov1_loss": yolov1_loss,
+            f"train_box_loss": box_loss,
+            f"train_object_loss": object_loss,
+            f"train_no_object_loss": noobject_loss,
+            f"train_prob_loss": prob_loss,
+        }, on_step=False, on_epoch=True)
+
+        # return loss so that lightning can call backward() automatically
+        return yolov1_loss
+
+    def validation_step(self, batch: torch.Tensor, batch_idx: int):
+        device = next(self.model.parameters()).device  # guaranteed to be a torch.device
+        images = batch[BatchInfoEnum.IMAGES.value]
+        labels = batch[BatchInfoEnum.LABELS.value]
+
+        preds = self.model(images)
+        loss_list = self.loss_function(preds,labels)
+        [
+            yolov1_loss,
+            box_loss,
+            object_loss,
+            noobject_loss,
+            prob_loss
+        ] = loss_list
+
+        # on_step = True --> Logs the metric at the current step
+        # on_epoch = True --> Automatically accumlates and logs at the end of the epoch
+        self.log_dict({
+            f"val_yolov1_loss": yolov1_loss,
+            f"val_box_loss": box_loss,
+            f"val_object_loss": object_loss,
+            f"val_no_object_loss": noobject_loss,
+            f"val_prob_loss": prob_loss,
+        }, on_step=False, on_epoch=True)
+
+        self.metric.update(
+            self.to_torchmetrics_format(preds),
+            self.to_torchmetrics_format(labels),
+        )
+
         return
 
-    def validation_step(self, images: torch.Tensor, labels: torch.Tensor, batch_idx: int):
+    def test_step(self, batch: torch.Tensor, batch_idx: int):
         device = next(self.model.parameters()).device  # guaranteed to be a torch.device
-        with torch.autocast(device_type=device.type, dtype=torch.float16, enabled=True):
-            preds = self.model(images)
-            loss_list = self.loss_function(preds,labels)
-            [
-                yolov1_loss,
-                box_loss,
-                object_loss,
-                noobject_loss,
-                prob_loss
-            ] = loss_list
+        images = batch[BatchInfoEnum.IMAGES.value]
+        labels = batch[BatchInfoEnum.LABELS]
 
-            # on_step = True --> Logs the metric at the current step
-            # on_epoch = True --> Automatically accumlates and logs at the end of the epoch
-            self.log_dict({
-                f"val_yolov1_loss": yolov1_loss,
-                f"val_box_loss": box_loss,
-                f"val_object_loss": object_loss,
-                f"val_no_object_loss": noobject_loss,
-                f"val_prob_loss": prob_loss,
-            }, on_step=False, on_epoch=True)
+        preds = self.model(images)
+        loss_list = self.loss_function(preds,labels)
+        [
+            yolov1_loss,
+            box_loss,
+            object_loss,
+            noobject_loss,
+            prob_loss
+        ] = loss_list
 
-            self.metric.update(
-                self.to_torchmetrics_format(preds),
-                self.to_torchmetrics_format(labels),
-            )
-        return
+        # on_step = True --> Logs the metric at the current step
+        # on_epoch = True --> Automatically accumlates and logs at the end of the epoch
+        self.log_dict({
+            f"test_yolov1_loss": yolov1_loss,
+            f"test_box_loss": box_loss,
+            f"test_object_loss": object_loss,
+            f"test_no_object_loss": noobject_loss,
+            f"test_prob_loss": prob_loss,
+        }, on_step=False, on_epoch=True)
 
-    def test_step(self, images: torch.Tensor, labels: torch.Tensor, batch_idx: int):
-        device = next(self.model.parameters()).device  # guaranteed to be a torch.device
-        with torch.autocast(device_type=device.type, dtype=torch.float16, enabled=True):
-            preds = self.model(images)
-            loss_list = self.loss_function(preds,labels)
-            [
-                yolov1_loss,
-                box_loss,
-                object_loss,
-                noobject_loss,
-                prob_loss
-            ] = loss_list
+        self.metric.update(
+            self.to_torchmetrics_format(preds),
+            self.to_torchmetrics_format(labels),
+        )
 
-            # on_step = True --> Logs the metric at the current step
-            # on_epoch = True --> Automatically accumlates and logs at the end of the epoch
-            self.log_dict({
-                f"test_yolov1_loss": yolov1_loss,
-                f"test_box_loss": box_loss,
-                f"test_object_loss": object_loss,
-                f"test_no_object_loss": noobject_loss,
-                f"test_prob_loss": prob_loss,
-            }, on_step=False, on_epoch=True)
-
-            self.metric.update(
-                self.to_torchmetrics_format(preds),
-                self.to_torchmetrics_format(labels),
-            )
         return
 
     def to_torchmetrics_format(self, preds: torch.Tensor):
@@ -327,9 +343,10 @@ class YOLOV1(torch_lightning.LightningModule):
         sched_name = sched_conf["name"]
 
         if sched_name == None:
+            print("[WARNING] NO SCHEDULER WILL BE USED.")
             return optimizer
 
-        if sched_name == "cosineannealinglr":
+        elif sched_name == "cosineannealinglr":
             scheduler = CosineAnnealingLR(
                 optimizer,
                 T_max=self.conf["training"]["epochs"],
@@ -387,7 +404,6 @@ class YOLOV1(torch_lightning.LightningModule):
             raise KeyError(f"optim name ({optim_name}) is not valid. Choose between 'adam' or 'adamw'.")
 
         try:
-            print(self.conf)
             _ = self.conf["training"]["hyperparams"]["optim"]["learning_rate"]
         except KeyError:
             raise KeyError("learning_rate not defined in ['hyperparams']['optim']")

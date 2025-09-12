@@ -11,11 +11,13 @@
     "num_boxes": 2
   },
   "training": {
+    "precision": 32,
     "from_pretrained": false,
     "weights_path": "../runs/checkpoints/weights.pt",
-    "logging_steps": 100,
+    "logging_steps": 20,
+    "validation_epochs": 5,
     "epochs": 135,
-    "batch_size": 64,
+    "batch_size": 8,
 
     "hyperparams": {
       "lambda_coord": 5.0,
@@ -26,7 +28,7 @@
 
         "name": "adamw",
         "weight_decay": 0.0005,
-        "learning_rate": 0.001,
+        "learning_rate": 0.0001,
         "adam_beta1": 0.9,
         "adam_beta2": 0.999
       },
@@ -65,7 +67,7 @@
     "name": "voc",
     "path": "./datasets/data",
     "num_workers": 2,
-    "num_classes": 80,
+    "num_classes": 20,
     "data_chs": 3,
     "prepare_per_node": true
   },
